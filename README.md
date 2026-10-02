@@ -78,6 +78,8 @@ Click **Add an OAuth Scope** under **User Token Scopes** once per scope. Leave *
 
 ![OAuth & Permissions page, Scopes section, showing where User Token Scopes are added](docs/images/slack-04-user-token-scopes.jpg)
 
+The **Add an OAuth Scope** button visible in the capture belongs to the Bot Token Scopes block; the User Token Scopes block below it has its own, just under the column header.
+
 ### 5. Install the app and copy the user token
 
 At the top of the same **OAuth & Permissions** page click **Install to Workspace** and allow the requested permissions. Slack then shows a **User OAuth Token** beginning with `xoxp-`. Copy it. (This step is not pictured because the page displays the token itself.)
@@ -86,19 +88,17 @@ Treat the token like a password: it can delete messages in your name. Never comm
 
 ### 6. Make the token available to slackctl
 
-slackctl reads only the `SLACK_ADMIN_TOKEN` environment variable; it never opens a file on its own. Any of these works:
+slackctl reads only the `SLACK_ADMIN_TOKEN` environment variable; it never opens a file on its own. Use a text editor for whichever you choose, so the token never appears in a typed command. Most shells record every command in a history file, which is why none of the forms below has you type the token at a prompt.
 
-```bash
-# a) export it for the shell session (or put the export in ~/.zshrc)
-export SLACK_ADMIN_TOKEN=xoxp-...
+- **A file Node loads.** With your editor, create `.env` in the checkout (it is gitignored) containing one line, `SLACK_ADMIN_TOKEN=xoxp-...`, then run:
 
-# b) keep it in a .env file (gitignored) and let Node load it
-echo 'SLACK_ADMIN_TOKEN=xoxp-...' > .env
-node --env-file=.env bin/slackctl.js auth
+  ```bash
+  node --env-file=.env bin/slackctl.js auth
+  ```
 
-```
+- **Your shell profile.** With your editor, add `export SLACK_ADMIN_TOKEN=xoxp-...` to `~/.zshrc` (or `~/.bashrc`), open a new terminal, and run `slackctl auth`.
 
-Avoid typing the token inline on a command line (`SLACK_ADMIN_TOKEN=xoxp-... slackctl ...`): most shells record the whole command in their history file.
+Do not type the token inline (`SLACK_ADMIN_TOKEN=xoxp-... slackctl ...`) or pipe it through `echo`; both land in shell history.
 
 Then confirm:
 
@@ -196,7 +196,7 @@ Options:
   -h, --help           display help for command
 ```
 
-`messages` takes the same selection options as `delete`, so it previews exactly what `delete` with the same options would remove:
+`messages` takes the same filters and bounds as `delete` (`--mine`, `--pattern`, `--limit`, `--date`, `--ts-from`, `--ts-to`), so it previews exactly what `delete` with the same options would remove. The two `delete`-only options, `--ts` and `--select`, have no listing counterpart: `--ts` names messages you already have from the `TS` column, and `--select` is a pick made at deletion time.
 
 ```bash
 slackctl messages general --limit 5
