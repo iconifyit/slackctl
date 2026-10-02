@@ -65,4 +65,4 @@ const register = (program, context) => {
         });
 };
 
-module.exports = { register, tokenType };
+module.exports = { register };

@@ -40,6 +40,13 @@ test('table: a header longer than every cell sets the column width', () => {
     assert.equal(rendered, 'MEMBER  ID\nyes     C01234ABC\n');
 });
 
+test('reservedWidth: the offset at which the column after the given ones starts', () => {
+    // Scenario: DATE (16 wide) and TS (17 wide), each followed by a two-space gutter.
+    const rows = [{ date: '2026-10-01 14:32', ts: '1790879520.000100' }];
+
+    assert.equal(output.reservedWidth(kMESSAGE_COLUMNS.slice(0, 2), rows), 16 + 2 + 17 + 2);
+});
+
 test('keyValue: values align after the longest label', () => {
     // Scenario: the `auth` block.
     const rendered = output.keyValue([['Workspace', 'Vectopus'], ['User', 'Scott Lewis'], ['User ID', 'U01234567']]);

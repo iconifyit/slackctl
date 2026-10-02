@@ -43,4 +43,4 @@ const register = (program, context) => {
         });
 };
 
-module.exports = { register, toChannelRow };
+module.exports = { register };

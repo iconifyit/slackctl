@@ -19,6 +19,28 @@ const kSELECTION_SINGLE      = /^\d+$/;
 const kMILLISECONDS_PER_SECOND = 1000;
 
 /**
+ * Width of one column as `table` will render it: the longest cell or the header.
+ *
+ * @param {{ key: string, header: string }} column
+ * @param {object[]} rows
+ * @returns {number}
+ */
+const columnWidth = ({ header, key }, rows) =>
+    Math.max(header.length, ...rows.map((row) => String(row[key] ?? '').length));
+
+/**
+ * Horizontal space `table` will spend on the given columns, each followed by
+ * a gutter: the offset at which the next column starts. Lets a caller size a
+ * final free-text column without re-deriving the layout rule.
+ *
+ * @param {Array<{ key: string, header: string }>} columns - The leading columns.
+ * @param {object[]} rows
+ * @returns {number}
+ */
+const reservedWidth = (columns, rows) =>
+    columns.reduce((total, column) => total + columnWidth(column, rows) + kGUTTER.length, 0);
+
+/**
  * Render rows as a fixed-width table with uppercase headers.
  *
  * Column width is the longest cell (header included); columns are separated
@@ -30,8 +52,7 @@ const kMILLISECONDS_PER_SECOND = 1000;
  */
 const table = (columns, rows) => {
     const cellOf = (row, key) => String(row[key] ?? '');
-    const widths = columns.map(({ header, key }) =>
-        Math.max(header.length, ...rows.map((row) => cellOf(row, key).length)));
+    const widths = columns.map((column) => columnWidth(column, rows));
 
     const renderLine = (cells) => cells
         .map((cell, index) => (index === cells.length - 1 ? cell : cell.padEnd(widths[index])))
@@ -318,5 +339,6 @@ module.exports = {
     oneLine,
     parseSelection,
     pick,
+    reservedWidth,
     table,
 };

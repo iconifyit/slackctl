@@ -8,7 +8,7 @@
 
 const { ConversationsService } = require('../conversations');
 const { MessagesService } = require('../messages');
-const { authorOf, formatDate, messageWidth, oneLine, table } = require('../output');
+const { authorOf, formatDate, messageWidth, oneLine, reservedWidth, table } = require('../output');
 const {
     channelArgument,
     dateOption,
@@ -29,9 +29,6 @@ const kCOLUMNS = [
     { header: 'Message', key: 'message' },
 ];
 const kNUMBER_COLUMN = { header: '#', key: 'number' };
-const kDATE_WIDTH    = 'YYYY-MM-DD HH:mm'.length;
-const kTS_WIDTH      = '1790879520.000100'.length;
-const kGUTTER_WIDTH  = 2;
 
 /**
  * Render messages as the DATE / TS / USER / MESSAGE table, optionally with a
@@ -43,20 +40,20 @@ const kGUTTER_WIDTH  = 2;
  * @returns {string}
  */
 const messageTable = (messages, stdout, { numbered = false } = {}) => {
-    const authors     = messages.map(authorOf);
-    const userWidth   = Math.max('USER'.length, ...authors.map((author) => author.length));
-    const numberWidth = numbered ? String(messages.length).length + kGUTTER_WIDTH : 0;
-    const reserved    = numberWidth + kDATE_WIDTH + kTS_WIDTH + userWidth + (kGUTTER_WIDTH * 3);
-    const width       = messageWidth(stdout, reserved);
-    const columns     = numbered ? [kNUMBER_COLUMN, ...kCOLUMNS] : kCOLUMNS;
-
-    const rows = messages.map((message, index) => ({
-        date    : formatDate(message.ts),
-        message : oneLine(message.text ?? '', width),
-        number  : String(index + 1),
-        ts      : message.ts,
-        user    : authors[index],
+    const columns = numbered ? [kNUMBER_COLUMN, ...kCOLUMNS] : kCOLUMNS;
+    const rows    = messages.map((message, index) => ({
+        date   : formatDate(message.ts),
+        number : String(index + 1),
+        ts     : message.ts,
+        user   : authorOf(message),
     }));
+
+    // MESSAGE is the last column; it gets whatever the terminal has left after the others.
+    const width = messageWidth(stdout, reservedWidth(columns.slice(0, -1), rows));
+
+    for (const [index, row] of rows.entries()) {
+        row.message = oneLine(messages[index].text ?? '', width);
+    }
 
     return table(columns, rows);
 };
