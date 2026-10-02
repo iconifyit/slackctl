@@ -19,18 +19,24 @@ const kSELECTION_SINGLE      = /^\d+$/;
 // ANSI CSI and OSC escape sequences, then any remaining C0/C1 control or DEL byte.
 const kESCAPE_SEQUENCES      = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 const kCONTROL_CHARACTERS    = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g;
+const kLINE_CONTROLS         = /[\t\n\r]/g;
 const kMILLISECONDS_PER_SECOND = 1000;
 
 /**
- * Remove terminal escape sequences and control characters from text that
- * came from Slack. Every rendered cell and value passes through here, so no
- * field written by another user or app can rewrite the screen before the
- * operator confirms a deletion.
+ * Make text that came from Slack safe for one terminal cell: escape
+ * sequences and control characters are removed, and tab, newline, and
+ * carriage return become spaces so a value cannot add rows or move the
+ * cursor. Every rendered cell and value passes through here, so no field
+ * written by another user or app can rewrite the screen before the operator
+ * confirms a deletion.
  *
  * @param {string} text
  * @returns {string}
  */
-const sanitizeTerminalText = (text) => text.replace(kESCAPE_SEQUENCES, '').replace(kCONTROL_CHARACTERS, '');
+const sanitizeTerminalText = (text) => text
+    .replace(kESCAPE_SEQUENCES, '')
+    .replace(kLINE_CONTROLS, ' ')
+    .replace(kCONTROL_CHARACTERS, '');
 
 /**
  * A row's value for a column, as a sanitized string.

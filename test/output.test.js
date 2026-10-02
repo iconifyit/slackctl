@@ -55,6 +55,14 @@ test('table and keyValue: every cell and value is sanitized, so an app username 
     assert.equal(output.keyValue([['Workspace', 'Vecto\x1b]0;x\x07pus']]), 'Workspace:  Vectopus\n');
 });
 
+test('table and keyValue: line-breaking controls in a value become spaces, so a value cannot add a row', () => {
+    // Scenario: an app username crafted as "trusted\nFAKE ROW" to fake a second preview line.
+    const rows = [{ id: 'C01234ABC', user: 'trusted\nFAKE ROW\r\tX' }];
+
+    assert.equal(output.table([{ header: 'User', key: 'user' }, { header: 'ID', key: 'id' }], rows), 'USER                 ID\ntrusted FAKE ROW  X  C01234ABC\n');
+    assert.equal(output.keyValue([['User', 'Scott\nLewis']]), 'User:  Scott Lewis\n');
+});
+
 test('keyValue: values align after the longest label', () => {
     // Scenario: the `auth` block.
     const rendered = output.keyValue([['Workspace', 'Vectopus'], ['User', 'Scott Lewis'], ['User ID', 'U01234567']]);

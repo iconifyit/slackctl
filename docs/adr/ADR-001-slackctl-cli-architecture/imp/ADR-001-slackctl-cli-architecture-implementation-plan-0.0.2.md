@@ -135,7 +135,7 @@ All source is CommonJS with `'use strict'`. The transport client and the two dom
 | `kNON_TTY_MESSAGE_WIDTH` | constant `100` | `MESSAGE` width when stdout is not a terminal |
 | `kMIN_MESSAGE_WIDTH` | constant `20` | Floor for narrow terminals |
 | `kCONFIRM_ATTEMPTS` | constant `3` | Bad answers tolerated by `pick` |
-| `sanitizeTerminalText(text)` | function | Removes ANSI escape sequences and control characters; the single chokepoint every rendered cell and value passes through |
+| `sanitizeTerminalText(text)` | function | Removes ANSI escape sequences and control characters and turns tab, newline, and carriage return into spaces; the single chokepoint every rendered cell and value passes through, so no value can add a row or move the cursor |
 | `table(columns, rows)` | function | Fixed-width table string; every cell sanitized |
 | `reservedWidth(columns, rows)` | function | Horizontal space `table` spends on the given columns and their gutters; lets a caller size a final free-text column from the same layout rule |
 | `keyValue(pairs)` | function | Aligned `Label:  value` block |
@@ -363,7 +363,7 @@ service.postMessage({ channel, text })                   -> Promise<{ ts }>
 ### 5.4 Presentation contract (`output.js` → CLI Shell)
 
 ```js
-sanitizeTerminalText(text)        -> string    // ANSI escape sequences and control characters removed
+sanitizeTerminalText(text)        -> string    // ANSI escape sequences and control characters removed; tab, LF, CR become spaces
 table(columns, rows)              -> string    // columns: TableColumn[]; rows: object[]; every cell sanitized; uppercase headers; width = longest cell; kGUTTER between columns; trailing newline
 reservedWidth(columns, rows)      -> number    // sum over the given columns of (width as table renders it + gutter)
 keyValue(pairs)                   -> string    // [['Workspace', 'Vectopus'], ...]; values sanitized; labels padded to the longest label plus a colon and two spaces
@@ -551,6 +551,7 @@ Every test file sets `process.env.TZ = 'America/New_York'` before its first `req
 | `oneLine` on text with newlines and a run of spaces, width 20 | single line, truncated with `…` at 20 |
 | `oneLine` on text carrying ANSI clear-screen, cursor, OSC, bell, NUL, and a C1 byte | every escape sequence and control character removed; visible text kept |
 | `table` cell and `keyValue` value carrying escape sequences | removed before width calculation and rendering, so an app username or workspace name cannot rewrite the screen |
+| `table` cell and `keyValue` value carrying newline, carriage return, or tab | rendered as spaces on one row; a value cannot add a row or move the cursor |
 | `oneLine` with a surrogate-pair emoji at the cut | truncated by code point: the emoji is kept whole or dropped, never split |
 | `authorOf` for a user message, an app message with `username`, an app message with only `bot_id` | the expected field in each case |
 | `parseSelection('1,3-5', 6)` | `[0, 2, 3, 4]` |
