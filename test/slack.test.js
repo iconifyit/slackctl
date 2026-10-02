@@ -86,6 +86,23 @@ test('call: a 429 without Retry-After waits the one-second default', async () =>
     assert.deepEqual(sleep.mock.calls.map((call) => call.arguments), [[1000]]);
 });
 
+test('call: Retry-After: 0 waits zero seconds, and a malformed value falls back to the default', async () => {
+    // Scenario: Slack says retry immediately; later Slack sends a header the tool cannot trust.
+    const zero = makeClient({ 'conversations.history': [
+        { body: { error: 'ratelimited', ok: false }, headers: { 'Retry-After': '0' }, status: 429 },
+        historyPage([]),
+    ] });
+    await zero.client.call('conversations.history', { channel: kCHANNEL });
+    assert.deepEqual(zero.sleep.mock.calls.map((call) => call.arguments), [[0]]);
+
+    const malformed = makeClient({ 'conversations.history': [
+        { body: { error: 'ratelimited', ok: false }, headers: { 'Retry-After': '2junk' }, status: 429 },
+        historyPage([]),
+    ] });
+    await malformed.client.call('conversations.history', { channel: kCHANNEL });
+    assert.deepEqual(malformed.sleep.mock.calls.map((call) => call.arguments), [[1000]]);
+});
+
 test('call: five consecutive 429s fail with ratelimited after four waits', async () => {
     // Scenario: Slack never stops rate limiting; the client must give up, not spin.
     const { client, calls, sleep } = makeClient({

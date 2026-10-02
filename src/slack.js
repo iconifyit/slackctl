@@ -43,15 +43,17 @@ class SlackApiError extends Error {
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Seconds Slack asked us to wait on a 429, or the default when the header is
- * absent or unparsable, so the retry loop always terminates by attempt count.
+ * Seconds Slack asked us to wait on a 429: the header's whole non-negative
+ * integer (zero included), or the default when it is absent or malformed, so
+ * the retry loop always terminates by attempt count.
  *
  * @param {Response} response - The 429 response.
  * @returns {number} Whole seconds to wait.
  */
 const retryAfterSeconds = (response) => {
-    const parsed = Number.parseInt(response.headers.get('retry-after') ?? '', 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : kDEFAULT_RETRY_AFTER_SECONDS;
+    const header = response.headers.get('retry-after') ?? '';
+
+    return /^\d+$/.test(header) ? Number(header) : kDEFAULT_RETRY_AFTER_SECONDS;
 };
 
 /**
