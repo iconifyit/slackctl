@@ -524,7 +524,7 @@ Runner: `node --test test/` via `npm test`. Assertions: `node:assert/strict`. No
 | `test/helpers/context.js` → `fakeContext({ routes, token, stdinLines, isTTY })`, `runCommand(argv, options)` | `fakeContext` assembles a `CommandContext` over the two helpers with a real `SlackClient` (`new SlackClient({ token, fetch, sleep: async () => {}, log })`). `runCommand` builds the program over it and runs `parseAsync`, resolving with the harness or rejecting with the thrown error. |
 | `test/fixtures/*.json` | Realistic payloads: workspace `Vectopus`, user `Scott Lewis` / `U01234567`; channels `general`, `development`, `client-project` (private), `random`, `signups`; `development` history by Scott and one other user; `signups` history of eleven app-posted `New signup: ...` notices with `bot_id`, `username: 'VectorIcons Messenger'`, and `<mailto:...|...>` markup (mailboxes under `example.invalid`, never routable addresses), spread across 2026-09-30 and 2026-10-01 in `America/New_York`. |
 
-Every test file sets `process.env.TZ = 'America/New_York'` before its first `require`. Every test states its scenario in a leading comment.
+Every test file that renders or computes dates sets `process.env.TZ = 'America/New_York'` before its first `require`; files that construct no dates do not. Every test states its scenario in a leading comment.
 
 ### 9.2 Transport (`test/slack.test.js`)
 
@@ -659,10 +659,6 @@ Only on the owner's explicit go-ahead, in a scratch channel the owner names: `au
 
 ## 10. Verification plan
 
-### 10.1 Live verification of 1.0.1 (2026-10-02, authorized by the owner)
-
-The defect was reproduced directly against Slack before the fix: `conversations.list` with `types=public_channel,private_channel` returned 9 channels, none private, as a JSON body, and 14 channels, 5 private, form-encoded; `conversations.history` honored `channel` and `limit` in both encodings, which is why the 1.0.0 smoke did not surface it. After the fix, `slackctl channels` listed the five private channels the token's user belongs to with `private` and `yes`, and `slackctl messages signups --limit 2` resolved the private channel by name and returned its messages. The claim in 5.1 that every Web API method accepts form encoding is Slack's documented contract for the Web API and was exercised live on `auth.test`, `conversations.list`, and `conversations.history`; `chat.delete` and `chat.postMessage` were not re-run live for 1.0.1, since they were not changed in behavior and a live run would post to and delete from a real channel.
-
 ### 10.0 Live smoke outcome (2026-10-02, #general, authorized by the owner)
 
 Run after step 9 against the vectoricons workspace with the owner's user token. `auth`, `channels`, `messages general --limit 3`, `delete general --dry-run --limit 1`, and `send general ... --dry-run` behaved as specified. Four messages were sent; `delete --ts` removed the first, `delete --date 2026-10-02 --pattern '/smoke-[0-9]+/' --select` with pick `1` removed one, and the remaining two were removed with `delete --pattern 'slackctl smoke' --limit 2` rather than the plan's bare `--limit 2`, because #general is a live channel and an unrelated post arriving between steps would otherwise have been selected; the deletion path exercised is identical. A final `messages --date --pattern` confirmed none remained. Slack accepted `limit: 100` on `conversations.history` (ADR Decision 5 holds; no change to the constant) and no 429 occurred. The run also established that a pseudo-terminal can report `isTTY` without `columns`; `messageWidth` floors the width in that case. App-posted messages in the live channel carried `bot_id` but no `username`, so `USER` showed the bot ID, as Decision 11's fallback specifies.
@@ -671,6 +667,10 @@ Run after step 9 against the vectoricons workspace with the owner's user token. 
 - `node --check` on every new file.
 - `node bin/slackctl.js --help` and `node bin/slackctl.js delete --help` render the documented options and conflicts.
 - Section 9.8 after step 9; the outcome is recorded in 10.0.
+
+### 10.0.1 Live verification of 1.0.1 (2026-10-02, authorized by the owner)
+
+The defect was reproduced directly against Slack before the fix: `conversations.list` with `types=public_channel,private_channel` returned 9 channels, none private, as a JSON body, and 14 channels, 5 private, form-encoded; `conversations.history` honored `channel` and `limit` in both encodings, which is why the 1.0.0 smoke did not surface it. After the fix, `slackctl channels` listed the five private channels the token's user belongs to with `private` and `yes`, and `slackctl messages signups --limit 2` resolved the private channel by name and returned its messages. The claim in 5.1 that every Web API method accepts form encoding is Slack's documented contract for the Web API and was exercised live on `auth.test`, `conversations.list`, and `conversations.history`; `chat.delete` and `chat.postMessage` were not re-run live for 1.0.1, since they were not changed in behavior and a live run would post to and delete from a real channel.
 
 ### 10.1 Review sequence
 
