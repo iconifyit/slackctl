@@ -29,10 +29,16 @@ const {
 const kCONFIRM_WORD = 'delete';
 const kABORTED      = 'Aborted. Nothing deleted.\n';
 
+const kREFUSALS = {
+    confirmation : 'Confirmation requires an interactive terminal; use --dry-run to preview.',
+    selection    : 'Interactive selection requires a terminal; drop --select for a non-interactive preview.',
+};
+
 /** A prompt was required but stdin is not a terminal. */
 class NonInteractiveError extends Error {
-    constructor() {
-        super('Confirmation requires an interactive terminal; use --dry-run to preview.');
+    /** @param {'confirmation' | 'selection'} prompt - Which prompt could not be shown. */
+    constructor(prompt) {
+        super(kREFUSALS[prompt]);
         this.name = 'NonInteractiveError';
     }
 }
@@ -123,10 +129,14 @@ const register = (program, context) => {
             context.stdout.write('The following messages will be deleted:\n\n');
             context.stdout.write(messageTable(candidates, context.stdout, { numbered: Boolean(options.select) }));
 
-            const needsTerminal = options.select || !options.dryRun;
+            if (!isInteractive(context.stdin)) {
+                if (options.select) {
+                    throw new NonInteractiveError('selection');
+                }
 
-            if (needsTerminal && !isInteractive(context.stdin)) {
-                throw new NonInteractiveError();
+                if (!options.dryRun) {
+                    throw new NonInteractiveError('confirmation');
+                }
             }
 
             const prompter = createPrompter({ input: context.stdin, output: context.stderr });

@@ -159,7 +159,7 @@ Each file exports exactly `register(program, context)`. Shared option parsers li
 | `auth.js` | `register`; module-internal `tokenType(token)` |
 | `channels.js` | `register`; module-internal `toChannelRow(channel)` |
 | `messages.js` | `register`, `messageTable(messages, stdout, { numbered })` (renders the DATE/TS/USER/MESSAGE table, computing the MESSAGE width from the other columns), `queryMessages({ client, messages, channel, options })` (the candidate set a set of options selects, including the `auth.test` lookup for `--mine`); both imported by `delete.js`, see 3.7 |
-| `delete.js` | `register`, `NonInteractiveError` (a prompt was required but stdin is not a terminal; printed verbatim by the runner), and the module-internal `buildCandidates({ client, messages, channel, options })` (explicit `--ts` or `queryMessages`) and `runDeletion({ messages, channel, chosen, context })` |
+| `delete.js` | `register`, `NonInteractiveError` (a prompt was required but stdin is not a terminal; one message for the confirmation, another for `--select`, so the operator is told which flag to drop; printed verbatim by the runner), and the module-internal `buildCandidates({ client, messages, channel, options })` (explicit `--ts` or `queryMessages`) and `runDeletion({ messages, channel, chosen, context })` |
 | `send.js` | `register` |
 
 ### 3.6 `bin/slackctl.js` (CLI Shell)
@@ -367,7 +367,7 @@ reservedWidth(columns, rows)      -> number    // sum over the given columns of 
 keyValue(pairs)                   -> string    // [['Workspace', 'Vectopus'], ...]; labels padded to the longest label plus a colon and two spaces
 formatDate(ts)                    -> string    // 'YYYY-MM-DD HH:mm' in process timezone
 dayRange(date)                    -> DayRange  // throws Error('Invalid date: <date>') unless a real YYYY-MM-DD
-oneLine(text, maxWidth)           -> string    // whitespace runs and newlines to one space; truncated to maxWidth with a trailing '…'
+oneLine(text, maxWidth)           -> string    // ANSI escape sequences and control characters removed; whitespace runs and newlines to one space; truncated to maxWidth with a trailing '…'
 messageWidth(stream)              -> number    // stream.isTTY ? max(kMIN_MESSAGE_WIDTH, stream.columns - fixed columns - gutters) : kNON_TTY_MESSAGE_WIDTH
 authorOf(message)                 -> string
 isInteractive(stream)             -> boolean
@@ -629,7 +629,7 @@ Calls `run(argv, context)` with a fake context and asserts the exit code and the
 | missing argument, invalid option value, conflicting options | 2; commander's `error: ...` on stderr; stdout empty |
 | no token | 1; stderr is exactly `SLACK_ADMIN_TOKEN is not set.` |
 | unknown channel name | 1; stderr is exactly `Channel not found: nonexistent` |
-| `delete` with non-TTY stdin | 1; stderr is exactly the refusal message, no prefix |
+| `delete` with non-TTY stdin | 1; stderr is exactly the confirmation refusal message, no prefix |
 | `auth` on `invalid_auth` | 1; stderr is the explanation for `invalid_auth` |
 | `channels` on an unlisted Slack code | 1; stderr is `slackctl: conversations.list failed: <code>` |
 | `channels` on HTTP 500 | 1; stderr is `slackctl: conversations.list: HTTP 500` |

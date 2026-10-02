@@ -205,9 +205,10 @@ test('delete --select --dry-run: picks, shows the selection, and exits without a
     assert.deepEqual(deletedTs(calls), []);
 });
 
-test('delete --select: requires a terminal even with --dry-run', async () => {
+test('delete --select: requires a terminal even with --dry-run, and says so', async () => {
+    // Scenario: a script passes --select --dry-run; the message must not suggest the flag already present.
     await assert.rejects(
         runCommand(['delete', 'development', '--limit', '4', '--select', '--dry-run'], { isTTY: false, routes: routes(kDEVELOPMENT), stdinLines: ['1'] }),
-        { message: 'Confirmation requires an interactive terminal; use --dry-run to preview.' },
+        { message: 'Interactive selection requires a terminal; drop --select for a non-interactive preview.' },
     );
 });
