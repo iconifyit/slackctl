@@ -668,9 +668,9 @@ Run after step 9 against the vectoricons workspace with the owner's user token. 
 - `node bin/slackctl.js --help` and `node bin/slackctl.js delete --help` render the documented options and conflicts.
 - Section 9.8 after step 9; the outcome is recorded in 10.0.
 
-### 10.0.1 Live verification of 1.0.1 (2026-10-02, authorized by the owner)
+### 10.0.1 Live verification of the form-encoding fix (2026-10-02, authorized by the owner)
 
-The defect was reproduced directly against Slack before the fix: `conversations.list` with `types=public_channel,private_channel` returned 9 channels, none private, as a JSON body, and 14 channels, 5 private, form-encoded; `conversations.history` honored `channel` and `limit` in both encodings, which is why the 1.0.0 smoke did not surface it. After the fix, `slackctl channels` listed the five private channels the token's user belongs to with `private` and `yes`, and `slackctl messages signups --limit 2` resolved the private channel by name and returned its messages. The claim in 5.1 that every Web API method accepts form encoding is Slack's documented contract for the Web API and was exercised live on `auth.test`, `conversations.list`, and `conversations.history`; `chat.delete` and `chat.postMessage` were not re-run live for 1.0.1, since they were not changed in behavior and a live run would post to and delete from a real channel.
+The defect was reproduced directly against Slack before the fix: `conversations.list` with `types=public_channel,private_channel` returned 9 channels, none private, as a JSON body, and 14 channels, 5 private, form-encoded; `conversations.history` honored `channel` and `limit` in both encodings, which is why the first smoke run did not surface it. After the fix, `slackctl channels` listed the five private channels the token's user belongs to with `private` and `yes`, and `slackctl messages signups --limit 2` resolved the private channel by name and returned its messages. The claim in 5.1 that every Web API method accepts form encoding is Slack's documented contract for the Web API and was exercised live on `auth.test`, `conversations.list`, and `conversations.history`; `chat.delete` and `chat.postMessage` were not re-run live for this fix, since they were not changed in behavior and a live run would post to and delete from a real channel.
 
 ### 10.1 Review sequence
 

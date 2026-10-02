@@ -1,6 +1,6 @@
 {
     "name": "slackctl",
-    "version": "1.0.1",
+    "version": "1.0.0",
     "description": "Slack admin CLI: inspect channels, list and delete messages, send messages",
     "bin": {
         "slackctl": "./bin/slackctl.js"
