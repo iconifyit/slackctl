@@ -47,6 +47,14 @@ test('reservedWidth: the offset at which the column after the given ones starts'
     assert.equal(output.reservedWidth(kMESSAGE_COLUMNS.slice(0, 2), rows), 16 + 2 + 17 + 2);
 });
 
+test('table and keyValue: every cell and value is sanitized, so an app username cannot rewrite the screen', () => {
+    // Scenario: an app posts with a custom username carrying a clear-screen sequence; the auth block shows a workspace name with a bell.
+    const rows = [{ id: 'C01234ABC', user: 'Vector\x1b[2JIcons \x07Messenger' }];
+
+    assert.equal(output.table([{ header: 'User', key: 'user' }, { header: 'ID', key: 'id' }], rows), 'USER                   ID\nVectorIcons Messenger  C01234ABC\n');
+    assert.equal(output.keyValue([['Workspace', 'Vecto\x1b]0;x\x07pus']]), 'Workspace:  Vectopus\n');
+});
+
 test('keyValue: values align after the longest label', () => {
     // Scenario: the `auth` block.
     const rendered = output.keyValue([['Workspace', 'Vectopus'], ['User', 'Scott Lewis'], ['User ID', 'U01234567']]);

@@ -62,6 +62,15 @@ test('messages --date --pattern: lists only that local day\'s matching app posts
     assert.deepEqual(history, { channel: 'C05678MNO', inclusive: true, latest: '1790827199.999999', limit: 100, oldest: '1790740800.000000' });
 });
 
+test('messages: a hostile app username is sanitized in the USER column', async () => {
+    // Scenario: an app whose display name carries an escape sequence posts in #signups.
+    const hostile = [{ bot_id: 'B0BAD0000', subtype: 'bot_message', text: 'New signup: testmember0badf00d', ts: '1790799000.000009', type: 'message', username: 'Vector\x1b[2JIcons Messenger' }];
+    const { stdout } = await runCommand(['messages', 'signups', '--limit', '1'], { routes: routes(hostile) });
+
+    assert.ok(!stdout.text.includes('\x1b'), 'no escape byte reaches stdout');
+    assert.match(stdout.text, /VectorIcons Messenger  New signup/);
+});
+
 test('messages: multi-line text is shown on one line', async () => {
     // Scenario: Dana's two-line message about the red build.
     const { stdout } = await runCommand(['messages', 'development', '--pattern', 'CI log'], { routes: routes(kDEVELOPMENT) });

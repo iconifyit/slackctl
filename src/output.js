@@ -22,6 +22,26 @@ const kCONTROL_CHARACTERS    = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g;
 const kMILLISECONDS_PER_SECOND = 1000;
 
 /**
+ * Remove terminal escape sequences and control characters from text that
+ * came from Slack. Every rendered cell and value passes through here, so no
+ * field written by another user or app can rewrite the screen before the
+ * operator confirms a deletion.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+const sanitizeTerminalText = (text) => text.replace(kESCAPE_SEQUENCES, '').replace(kCONTROL_CHARACTERS, '');
+
+/**
+ * A row's value for a column, as a sanitized string.
+ *
+ * @param {object} row
+ * @param {string} key
+ * @returns {string}
+ */
+const cellOf = (row, key) => sanitizeTerminalText(String(row[key] ?? ''));
+
+/**
  * Width of one column as `table` will render it: the longest cell or the header.
  *
  * @param {{ key: string, header: string }} column
@@ -29,7 +49,7 @@ const kMILLISECONDS_PER_SECOND = 1000;
  * @returns {number}
  */
 const columnWidth = ({ header, key }, rows) =>
-    Math.max(header.length, ...rows.map((row) => String(row[key] ?? '').length));
+    Math.max(header.length, ...rows.map((row) => cellOf(row, key).length));
 
 /**
  * Horizontal space `table` will spend on the given columns, each followed by
@@ -47,14 +67,14 @@ const reservedWidth = (columns, rows) =>
  * Render rows as a fixed-width table with uppercase headers.
  *
  * Column width is the longest cell (header included); columns are separated
- * by two spaces; the last column is not padded. Ends with a newline.
+ * by two spaces; the last column is not padded. Ends with a newline. Every
+ * cell is sanitized for the terminal.
  *
  * @param {Array<{ key: string, header: string }>} columns - Column order, row key, and header text.
  * @param {object[]} rows - Objects holding a value per column key.
  * @returns {string} The rendered table.
  */
 const table = (columns, rows) => {
-    const cellOf = (row, key) => String(row[key] ?? '');
     const widths = columns.map((column) => columnWidth(column, rows));
 
     const renderLine = (cells) => cells
@@ -70,7 +90,8 @@ const table = (columns, rows) => {
 };
 
 /**
- * Render label/value pairs with the values aligned in one column.
+ * Render label/value pairs with the values aligned in one column. Values are
+ * sanitized for the terminal.
  *
  * @param {Array<[string, string]>} pairs - Label and value, in display order.
  * @returns {string} The rendered block, ending with a newline.
@@ -83,7 +104,7 @@ const keyValue = (pairs) => {
     const labelWidth = Math.max(...pairs.map(([label]) => label.length)) + 1;
 
     return pairs
-        .map(([label, value]) => `${`${label}:`.padEnd(labelWidth)}${kGUTTER}${value}\n`)
+        .map(([label, value]) => `${`${label}:`.padEnd(labelWidth)}${kGUTTER}${sanitizeTerminalText(String(value))}\n`)
         .join('');
 };
 
@@ -151,11 +172,7 @@ const dayRange = (date) => {
  * @returns {string}
  */
 const oneLine = (text, maxWidth) => {
-    const collapsed = text
-        .replace(kESCAPE_SEQUENCES, '')
-        .replace(kCONTROL_CHARACTERS, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+    const collapsed = sanitizeTerminalText(text).replace(/\s+/g, ' ').trim();
 
     // Truncate by code point, not UTF-16 unit, so an emoji is never split into a lone surrogate.
     const codePoints = Array.from(collapsed);
@@ -355,5 +372,6 @@ module.exports = {
     parseSelection,
     pick,
     reservedWidth,
+    sanitizeTerminalText,
     table,
 };
