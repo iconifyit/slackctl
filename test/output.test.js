@@ -77,6 +77,15 @@ test('oneLine: strips terminal escape sequences and control characters from untr
     assert.equal(output.oneLine(hostile, 80), 'Deploy done now31m.');
 });
 
+test('oneLine: truncates by code point so an emoji at the boundary is kept whole or dropped, never split', () => {
+    // Scenario: a message whose 20th visible character is a surrogate-pair emoji.
+    const text = 'Deploy done for all ' + '🎉' + ' teams today';
+
+    assert.equal(output.oneLine(text, 20), 'Deploy done for all…');
+    assert.equal(output.oneLine(text, 22), 'Deploy done for all 🎉…');
+    assert.ok(!/[\uD800-\uDFFF]/.test(output.oneLine(text, 21).replace(/[\uD83C-\uDBFF][\uDC00-\uDFFF]/g, '')), 'no lone surrogate');
+});
+
 test('oneLine: collapses whitespace and truncates with an ellipsis', () => {
     // Scenario: a multi-line message shown in a 20-character column.
     assert.equal(output.oneLine('Fixed the\n\n  deployment   issue.', 20), 'Fixed the deploymen…');

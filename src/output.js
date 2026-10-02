@@ -157,11 +157,14 @@ const oneLine = (text, maxWidth) => {
         .replace(/\s+/g, ' ')
         .trim();
 
-    if (collapsed.length <= maxWidth) {
+    // Truncate by code point, not UTF-16 unit, so an emoji is never split into a lone surrogate.
+    const codePoints = Array.from(collapsed);
+
+    if (codePoints.length <= maxWidth) {
         return collapsed;
     }
 
-    return `${collapsed.slice(0, maxWidth - kELLIPSIS.length)}${kELLIPSIS}`;
+    return `${codePoints.slice(0, maxWidth - kELLIPSIS.length).join('')}${kELLIPSIS}`;
 };
 
 /**
