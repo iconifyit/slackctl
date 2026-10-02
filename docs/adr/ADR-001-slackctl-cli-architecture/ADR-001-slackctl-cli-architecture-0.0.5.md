@@ -1,11 +1,7 @@
-# [DEPRECATED]
-
-Superseded by [0.0.5](./ADR-001-slackctl-cli-architecture-0.0.5.md).
-
 # ADR-001: slackctl CLI Architecture
 
 **Status**: Accepted (2026-10-02)
-**Version**: 0.0.4 (supersedes [0.0.3](./ADR-001-slackctl-cli-architecture-0.0.3.md))
+**Version**: 0.0.5 (supersedes [0.0.4](./ADR-001-slackctl-cli-architecture-0.0.4.md))
 **Date**: 2026-10-02
 **Deciders**: Scott Lewis (owner); Claude (author)
 **Source task**: `automations/task.md`
@@ -103,7 +99,7 @@ The two `messages.js` files share a basename because the task layout requires it
 
 9. **Rate limiting.** There is no fixed sleep anywhere in the tool. The transport handles HTTP 429 reactively: read `Retry-After`, write `Rate limited by Slack; waiting <n>s...` to stderr, sleep exactly that long, retry, up to five attempts per call, then fail with `SlackApiError('ratelimited')`. Every call runs at full speed until Slack says otherwise, and waits only as long as Slack asks. This retires the script's unconditional 61-second sleep, which made the script slower than deleting by hand whenever the app was not actually on the restricted tier.
 
-10. **Error strategy.** The transport throws `SlackApiError` carrying `method` and Slack's `error` code. The entry point maps known codes to actionable messages (`invalid_auth`, `not_authed`, `token_revoked`, `account_inactive` for authentication; `channel_not_found`, `not_in_channel`, `cant_delete_message`, `message_not_found`, `ratelimited` for operations) and prints `slackctl: <method> failed: <code>` for anything else. Runtime errors exit 1; commander's usage errors exit 2 (its default). Errors and progress go to stderr; data goes to stdout so output can be piped.
+10. **Error strategy.** The transport throws `SlackApiError` carrying `method` and Slack's `error` code. The entry point maps known codes to actionable messages (`invalid_auth`, `not_authed`, `token_revoked`, `account_inactive` for authentication; `channel_not_found`, `not_in_channel`, `cant_delete_message`, `message_not_found`, `ratelimited` for operations) and prints `slackctl: <method> failed: <code>` for anything else. Runtime errors exit 1; usage errors exit 2, installed explicitly at the entry point rather than taken from commander's default. Errors and progress go to stderr; data goes to stdout so output can be piped.
 
 11. **Output.** Tables are computed-width columns with uppercase headers and two-space gutters, matching the examples. The `messages` and `delete` tables have the columns `DATE`, `TS`, `USER`, `MESSAGE`. `USER` is the author's user ID, which the task prose lists as a displayed field and which the preview needs once deletion can cover other authors; it costs no extra API calls. Messages posted by apps carry no `user`; for those the column shows `username` when present, otherwise `bot_id`, so an app-posted notification is never shown with a blank author. `DATE` is the message `ts` rendered as `YYYY-MM-DD HH:mm` in the local timezone. `MESSAGE` is the text collapsed to one line (newlines become spaces) and truncated to the terminal width, or 100 characters when stdout is not a TTY. In the `channels` table, `TYPE` is `public` or `private` from `is_private` and `MEMBER` is `yes` or `no` from `is_member`. Archived channels are excluded by default via `exclude_archived: true`.
 
