@@ -50,7 +50,15 @@ const parseTs = (value) => {
  * @param {string[]} [previous] - Values parsed so far.
  * @returns {string[]}
  */
-const collectTs = (value, previous = []) => [...previous, parseTs(value)];
+const collectTs = (value, previous = []) => {
+    const ts = parseTs(value);
+
+    if (previous.includes(ts)) {
+        throw new InvalidArgumentError(`duplicate timestamp ${ts}`);
+    }
+
+    return [...previous, ts];
+};
 
 /**
  * @param {string} value - `YYYY-MM-DD`.
@@ -156,10 +164,6 @@ module.exports = {
     effectiveLimit,
     limitOption,
     mineOption,
-    parseDate,
-    parsePatternOption,
-    parsePositiveInteger,
-    parseTs,
     patternOption,
     selectOption,
     tsFromOption,

@@ -128,6 +128,11 @@ test('delete --ts: one unknown timestamp fails before anything is deleted', asyn
     assert.equal(harness.stdout.text, '');
 });
 
+test('delete --ts: a repeated timestamp is a usage error, so one message is never deleted twice', async () => {
+    // Scenario: the same ts pasted twice.
+    await assert.rejects(runCommand(['delete', 'development', '--ts', '1790800920.000300', '1790800920.000300'], { routes: routes(kDEVELOPMENT) }), usageError);
+});
+
 test('delete --ts: cannot be combined with other selectors', async () => {
     for (const extra of [['--limit', '5'], ['--mine'], ['--pattern', 'x'], ['--date', '2026-09-30'], ['--ts-from', '1790800920.000300'], ['--select']]) {
         await assert.rejects(runCommand(['delete', 'development', '--ts', '1790800920.000300', ...extra], { routes: routes(kDEVELOPMENT) }), usageError, extra.join(' '));
