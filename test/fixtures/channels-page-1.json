@@ -1,0 +1,8 @@
+{
+    "ok": true,
+    "channels": [
+        { "id": "C01234ABC", "name": "general", "is_private": false, "is_member": true, "is_archived": false },
+        { "id": "C02345DEF", "name": "development", "is_private": false, "is_member": true, "is_archived": false }
+    ],
+    "response_metadata": { "next_cursor": "dGVhbTpDMDM0NTZHSEk=" }
+}

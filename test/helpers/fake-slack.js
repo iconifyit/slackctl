@@ -21,12 +21,40 @@ const toResponse = ({ status = 200, headers = {}, body = {} }) => ({
 });
 
 /**
+ * A route for `conversations.history` that behaves like Slack: newest first,
+ * honors `oldest`, `latest`, `inclusive`, and `limit`, and pages with an
+ * opaque cursor. Lets tests assert on what the service does with bounds and
+ * limits rather than on what a canned page happens to contain.
+ *
+ * @param {object[]} messages - Every message in the channel, any order.
+ * @returns {(args: object) => { body: object }}
+ */
+const historyRoute = (messages) => {
+    const newestFirst = [...messages].sort((left, right) => Number(right.ts) - Number(left.ts));
+
+    return ({ cursor, inclusive = false, latest, limit = 100, oldest }) => {
+        const inRange = newestFirst.filter(({ ts }) => {
+            const value = Number(ts);
+            const aboveOldest = oldest === undefined || (inclusive ? value >= Number(oldest) : value > Number(oldest));
+            const belowLatest = latest === undefined || (inclusive ? value <= Number(latest) : value < Number(latest));
+            return aboveOldest && belowLatest;
+        });
+        const offset = cursor ? Number(cursor) : 0;
+        const page   = inRange.slice(offset, offset + limit);
+        const next   = offset + limit < inRange.length ? String(offset + limit) : '';
+
+        return { body: { messages: page, ok: true, response_metadata: { next_cursor: next } } };
+    };
+};
+
+/**
  * Create a fake Slack API.
  *
- * `routes` maps a method name to either one response entry, returned for
- * every request to that method, or an array of entries consumed in order
- * (pagination, 429 sequences). A request to an unrouted method, or past the
- * end of an array, throws so an unexpected call fails the test loudly.
+ * `routes` maps a method name to one of: a response entry, returned for every
+ * request to that method; an array of entries consumed in order (pagination,
+ * 429 sequences); or a function of the request args returning an entry. A
+ * request to an unrouted method, or past the end of an array, throws so an
+ * unexpected call fails the test loudly.
  *
  * @param {Object<string, object|object[]>} routes
  * @returns {{ fetch: Function, calls: Array<{ method: string, args: object, headers: object }> }}
@@ -49,6 +77,10 @@ const createFakeSlack = (routes) => {
             throw new Error(`Unrouted Slack method: ${method}`);
         }
 
+        if (typeof route === 'function') {
+            return toResponse(route(JSON.parse(init.body)));
+        }
+
         if (!Array.isArray(route)) {
             return toResponse(route);
         }
@@ -65,4 +97,4 @@ const createFakeSlack = (routes) => {
     return { calls, fetch };
 };
 
-module.exports = { createFakeSlack };
+module.exports = { createFakeSlack, historyRoute };
