@@ -1,0 +1,9 @@
+[
+    { "type": "message", "ts": "1790879520.000100", "user": "U01234567", "text": "Fixed the deployment issue." },
+    { "type": "message", "ts": "1790875200.000500", "user": "U07654321", "text": "Can you look at the staging deploy?" },
+    { "type": "message", "ts": "1790871420.000200", "user": "U01234567", "text": "PR is ready for review." },
+    { "type": "message", "ts": "1790868000.000600", "user": "U07654321", "text": "Morning!" },
+    { "type": "message", "ts": "1790800920.000300", "user": "U01234567", "text": "Looking into this now." },
+    { "type": "message", "ts": "1790797200.000700", "user": "U07654321", "text": "Build is red on develop.\nSee the CI log." },
+    { "type": "message", "ts": "1790793600.000400", "user": "U01234567", "text": "Deploying 1.4.2 to staging." }
+]
