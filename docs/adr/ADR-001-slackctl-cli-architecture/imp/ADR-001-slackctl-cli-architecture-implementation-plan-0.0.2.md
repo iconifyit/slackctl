@@ -411,7 +411,7 @@ Per-command behavior:
 - `auth`: `auth.test`; `keyValue` with Workspace (`team`), User (`user`), User ID (`user_id`), Token (`tokenType`: `xoxp-` → `user`, `xoxb-` → `bot`, prefix `xoxe` → `user (refreshable)`, else `unknown`), Status `authenticated`. On `SlackApiError`, print the block with `Status: failed (<code>)` to stdout and throw the error so the runner exits 1.
 - `channels`: `listChannels`; rows `{ name, id, type: is_private ? 'private' : 'public', member: is_member ? 'yes' : 'no' }` sorted by `name`; `table` with `NAME`, `ID`, `TYPE`, `MEMBER`.
 - `messages <channel>`: `resolveChannel`; `userId` from `auth.test` only when `--mine`; `fetchMessages`; `table` with `DATE`, `TS`, `USER`, `MESSAGE`; `No messages matched.` on empty.
-- `delete <channel>`: `buildCandidates` (`--ts` → `fetchMessagesByTs`; otherwise `fetchMessages` with `effectiveLimit` and bounds from `--date` or `--ts-from`/`--ts-to`). Then in order: empty → `No messages matched.`; print `The following messages will be deleted:` and the table (with a leading `#` column when `--select`); `--select` → `pick`; `null` → `Aborted. Nothing deleted.`; otherwise reprint the chosen subset; `--dry-run` → `Dry run. Nothing deleted.`; not interactive → throw `Error('Confirmation requires an interactive terminal; use --dry-run to preview.')`; `confirm('delete')` false → `Aborted. Nothing deleted.`; `runDeletion`: sequential `deleteMessage`, `Deleted <i>/<n>: <ts>` to stderr each; on a throw, write `Deleted <i> of <n>. Failed on <ts>: <code>` to stderr and rethrow; on completion write `Deletion successful. <n> messages deleted.` to stdout.
+- `delete <channel>`: `buildCandidates` (`--ts` → `fetchMessagesByTs`; otherwise `fetchMessages` with `effectiveLimit` and bounds from `--date` or `--ts-from`/`--ts-to`). Then in order: empty → `No messages matched.`; print `The following messages will be deleted:` and the table (with a leading `#` column when `--select`); `--select` → `pick`; `null` → `Aborted. Nothing deleted.`; otherwise reprint the chosen subset; `--dry-run` → `Dry run. Nothing deleted.`; not interactive → throw `NonInteractiveError('selection')` when `--select` is present (`Interactive selection requires a terminal; drop --select for a non-interactive preview.`) or `NonInteractiveError('confirmation')` when `--dry-run` is absent (`Confirmation requires an interactive terminal; use --dry-run to preview.`), both printed verbatim by the runner; `confirm('delete')` false → `Aborted. Nothing deleted.`; `runDeletion`: sequential `deleteMessage`, `Deleted <i>/<n>: <ts>` to stderr each; on a throw, write `Deleted <i> of <n>. Failed on <ts>: <code>` to stderr and rethrow; on completion write `Deletion successful. <n> messages deleted.` to stdout.
 - `send <channel> <text>`: `resolveChannel`; `--dry-run` → `Dry run. Would send to #<name> (<id>):` and the text; else `postMessage` and `Sent to #<name> (<id>) at <ts>.`
 
 ### 5.6 Runner contract (`bin/slackctl.js` → operating system)
@@ -530,6 +530,7 @@ Every test file sets `process.env.TZ = 'America/New_York'` before its first `req
 | `ok:false` body with `error: 'channel_not_found'` | throws `SlackApiError` with `method` and `code` | API errors surface as typed errors, not silent results |
 | 429 with `Retry-After: 2`, then 200 | `sleep` called once with 2000; `log` called once with the wait line; result returned | Reactive wait honors Slack's number |
 | 429 with no `Retry-After`, then 200 | `sleep` called with 1000 | Missing header does not hang or crash |
+| 429 with `Retry-After: 0`, then 200; 429 with `Retry-After: 2junk`, then 200 | `sleep` called with 0; `sleep` called with 1000 | Zero is honored; a malformed header falls back rather than being partially parsed |
 | five consecutive 429s | throws `SlackApiError` with `code === 'ratelimited'`; `sleep` called four times | Retry is bounded |
 | two consecutive 200s | `sleep` never called | No fixed sleeps anywhere |
 | HTTP 500 | throws `Error` naming the method and status | Non-Slack failures are not mistaken for API errors |
@@ -546,6 +547,8 @@ Every test file sets `process.env.TZ = 'America/New_York'` before its first `req
 | `dayRange('2026-09-30')` | `oldest` is local midnight 2026-09-30 as `ts`; `latest` is local midnight 2026-10-01 minus one microsecond |
 | `dayRange('2026-02-30')`, `dayRange('yesterday')` | throws `Invalid date: ...` |
 | `oneLine` on text with newlines and a run of spaces, width 20 | single line, truncated with `…` at 20 |
+| `oneLine` on text carrying ANSI clear-screen, cursor, OSC, bell, NUL, and a C1 byte | every escape sequence and control character removed; visible text kept |
+| `oneLine` with a surrogate-pair emoji at the cut | truncated by code point: the emoji is kept whole or dropped, never split |
 | `authorOf` for a user message, an app message with `username`, an app message with only `bot_id` | the expected field in each case |
 | `parseSelection('1,3-5', 6)` | `[0, 2, 3, 4]` |
 | `parseSelection('all', 6)` | `[0..5]` |
@@ -614,6 +617,7 @@ Built with `createProgram(fakeContext(...))`, `program.exitOverride()`, `parseAs
 | `delete signups --date 2026-09-30 --pattern '/testmember[0-9]+/' --select`, stdin `2,4` then `delete` | second and fourth candidates deleted, nothing else |
 | `delete ... --select`, stdin `9`, `9`, `9` | `Aborted. Nothing deleted.`; no `chat.delete` |
 | `delete ... --select --dry-run`, stdin `1` | pick happens; no confirmation prompt; no `chat.delete` |
+| `delete ... --select --dry-run`, stdin not a TTY | `NonInteractiveError` naming `--select`; no prompt; no `chat.delete` |
 | `send development "PR is ready" --dry-run` | preview with `#development (C02345DEF)`; no `chat.postMessage` |
 | `send development "PR is ready"` | `chat.postMessage` with the resolved ID; `Sent to #development (C02345DEF) at <ts>.` |
 | `send nonexistent "x"` | `ChannelNotFoundError` |
