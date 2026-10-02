@@ -17,6 +17,7 @@ const channels = require('../src/commands/channels');
 const messages = require('../src/commands/messages');
 const remove = require('../src/commands/delete');
 const send = require('../src/commands/send');
+const { NonInteractiveError } = require('../src/commands/delete');
 
 const kEXIT_RUNTIME_ERROR = 1;
 const kEXIT_USAGE_ERROR   = 2;
@@ -34,7 +35,8 @@ const kFRIENDLY_ERRORS = {
     token_revoked       : 'The token has been revoked (token_revoked). Issue a new one.',
 };
 
-const kDOMAIN_ERRORS = [AmbiguousChannelError, ChannelNotFoundError, MessageNotFoundError];
+/** Errors whose message is printed verbatim, without the `slackctl:` prefix. */
+const kDOMAIN_ERRORS = [AmbiguousChannelError, ChannelNotFoundError, MessageNotFoundError, NonInteractiveError];
 
 /** `SLACK_ADMIN_TOKEN` is absent or empty. */
 class MissingTokenError extends Error {
@@ -136,31 +138,36 @@ const describeError = (error) => {
 };
 
 /**
- * Run the CLI. Usage errors exit 2 (commander has already written its
- * message); help and version exit 0; runtime errors exit 1 with a message.
+ * Run the CLI and return the exit code.
+ *
+ * Usage errors return 2 (commander has already written its message to
+ * `context.stderr`); help and version return 0; runtime errors write one
+ * message to `context.stderr` and return 1.
  *
  * @param {string[]} argv - Usually `process.argv`.
- * @returns {Promise<void>}
+ * @param {ReturnType<typeof createContext>} [context] - Injected in tests.
+ * @returns {Promise<number>} The process exit code.
  */
-const run = async (argv) => {
-    const context = createContext();
-
+const run = async (argv, context = createContext()) => {
     try {
         await createProgram(context).parseAsync(argv);
     }
     catch (error) {
         if (error instanceof CommanderError) {
-            process.exitCode = error.exitCode;
-            return;
+            return error.exitCode;
         }
 
         context.stderr.write(`${describeError(error)}\n`);
-        process.exitCode = kEXIT_RUNTIME_ERROR;
+        return kEXIT_RUNTIME_ERROR;
     }
+
+    return 0;
 };
 
 if (require.main === module) {
-    run(process.argv);
+    run(process.argv).then((exitCode) => {
+        process.exitCode = exitCode;
+    });
 }
 
-module.exports = { MissingTokenError, createContext, createProgram, describeError };
+module.exports = { MissingTokenError, createContext, createProgram, run };

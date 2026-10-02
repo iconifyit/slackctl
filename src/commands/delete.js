@@ -26,9 +26,16 @@ const {
     validateRange,
 } = require('./options');
 
-const kCONFIRM_WORD    = 'delete';
-const kNOT_INTERACTIVE = 'Confirmation requires an interactive terminal; use --dry-run to preview.';
-const kABORTED         = 'Aborted. Nothing deleted.\n';
+const kCONFIRM_WORD = 'delete';
+const kABORTED      = 'Aborted. Nothing deleted.\n';
+
+/** A prompt was required but stdin is not a terminal. */
+class NonInteractiveError extends Error {
+    constructor() {
+        super('Confirmation requires an interactive terminal; use --dry-run to preview.');
+        this.name = 'NonInteractiveError';
+    }
+}
 
 /**
  * @param {number} count
@@ -119,7 +126,7 @@ const register = (program, context) => {
             const needsTerminal = options.select || !options.dryRun;
 
             if (needsTerminal && !isInteractive(context.stdin)) {
-                throw new Error(kNOT_INTERACTIVE);
+                throw new NonInteractiveError();
             }
 
             const prompter = createPrompter({ input: context.stdin, output: context.stderr });
@@ -160,4 +167,4 @@ const register = (program, context) => {
         });
 };
 
-module.exports = { buildCandidates, register, runDeletion };
+module.exports = { NonInteractiveError, register };
