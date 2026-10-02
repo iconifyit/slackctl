@@ -41,7 +41,9 @@ class SlackApiError extends Error {
  * Slack reads some arguments only from a form-encoded body: `conversations.list`
  * ignores `types` when it arrives as JSON and silently returns public channels
  * only. Form encoding is accepted by every method, so it is used for all of
- * them. Undefined values are omitted; everything else is stringified.
+ * them. Undefined values are omitted; objects and arrays (for example
+ * `blocks`) become the JSON string Slack expects inside a form field; every
+ * other value is stringified.
  *
  * @param {object} args - Request arguments.
  * @returns {URLSearchParams}
@@ -49,7 +51,7 @@ class SlackApiError extends Error {
 const encodeArguments = (args) => new URLSearchParams(
     Object.entries(args)
         .filter(([, value]) => value !== undefined)
-        .map(([key, value]) => [key, String(value)]),
+        .map(([key, value]) => [key, typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)]),
 );
 
 /**
@@ -136,7 +138,7 @@ class SlackClient {
      * is inserted between successful calls.
      *
      * @param {string} method - Slack API method name, for example `conversations.history`.
-     * @param {object} [args] - JSON body for the request.
+     * @param {object} [args] - Request arguments, sent as form fields.
      * @returns {Promise<object>} The response body (`ok: true`).
      * @throws {SlackApiError} On `ok: false`, or with code `ratelimited` when every attempt was a 429.
      * @throws {Error} On any other non-2xx HTTP status.
@@ -190,7 +192,7 @@ class SlackClient {
      * Send one form-encoded POST with the bearer header.
      *
      * @param {string} method - Slack API method name.
-     * @param {object} args - JSON body.
+     * @param {object} args - Request arguments, sent as form fields.
      * @returns {Promise<Response>}
      */
     #post(method, args) {

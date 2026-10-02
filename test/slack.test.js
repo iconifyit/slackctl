@@ -54,6 +54,15 @@ test('call: arguments are form-encoded, so Slack honors them on every method', a
     assert.deepEqual(calls[0].args, { exclude_archived: true, limit: 200, types: 'public_channel,private_channel' });
 });
 
+test('call: structured arguments are sent as the JSON string Slack expects inside a form field', async () => {
+    // Scenario: a future chat.postMessage with blocks must not degrade to "[object Object]".
+    const { client, calls } = makeClient({ 'chat.postMessage': { body: { ok: true, ts: '1790886000.000800' } } });
+
+    await client.call('chat.postMessage', { blocks: [{ text: { text: 'Hi', type: 'plain_text' }, type: 'section' }], channel: kCHANNEL });
+
+    assert.equal(calls[0].rawBody, `blocks=${encodeURIComponent('[{"text":{"text":"Hi","type":"plain_text"},"type":"section"}]')}&channel=${kCHANNEL}`);
+});
+
 test('call: ok:false becomes a SlackApiError carrying method and code', async () => {
     // Scenario: history requested for a channel the token's user is not a member of.
     const { client } = makeClient({
