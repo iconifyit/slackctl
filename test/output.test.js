@@ -70,6 +70,13 @@ test('dayRange: rejects impossible and malformed dates', () => {
     assert.throws(() => output.dayRange('yesterday'), { message: 'Invalid date: yesterday' });
 });
 
+test('oneLine: strips terminal escape sequences and control characters from untrusted text', () => {
+    // Scenario: a message crafted to clear the screen and move the cursor before the operator confirms.
+    const hostile = 'Deploy \x1b[2J\x1b[H\x07done\x1b]0;title\x07 \x00now\x9b31m.';
+
+    assert.equal(output.oneLine(hostile, 80), 'Deploy done now31m.');
+});
+
 test('oneLine: collapses whitespace and truncates with an ellipsis', () => {
     // Scenario: a multi-line message shown in a 20-character column.
     assert.equal(output.oneLine('Fixed the\n\n  deployment   issue.', 20), 'Fixed the deploymen…');

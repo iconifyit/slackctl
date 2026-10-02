@@ -16,6 +16,9 @@ const kELLIPSIS              = '…';
 const kDATE_PATTERN          = /^(\d{4})-(\d{2})-(\d{2})$/;
 const kSELECTION_RANGE       = /^(\d+)-(\d+)$/;
 const kSELECTION_SINGLE      = /^\d+$/;
+// ANSI CSI and OSC escape sequences, then any remaining C0/C1 control or DEL byte.
+const kESCAPE_SEQUENCES      = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+const kCONTROL_CHARACTERS    = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g;
 const kMILLISECONDS_PER_SECOND = 1000;
 
 /**
@@ -138,12 +141,21 @@ const dayRange = (date) => {
 /**
  * Collapse whitespace to single spaces and truncate with an ellipsis.
  *
+ * Terminal control sequences and control characters are removed first:
+ * message text is written by other users and apps, and an escape sequence
+ * in a preview could clear or rewrite the screen right before the operator
+ * confirms a deletion.
+ *
  * @param {string} text - Raw message text.
  * @param {number} maxWidth - Maximum length of the result.
  * @returns {string}
  */
 const oneLine = (text, maxWidth) => {
-    const collapsed = text.replace(/\s+/g, ' ').trim();
+    const collapsed = text
+        .replace(kESCAPE_SEQUENCES, '')
+        .replace(kCONTROL_CHARACTERS, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 
     if (collapsed.length <= maxWidth) {
         return collapsed;
