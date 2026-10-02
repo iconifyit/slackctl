@@ -44,5 +44,6 @@ test('send: an unknown channel fails before posting', async () => {
 });
 
 test('send: the text argument is required', async () => {
+    // Scenario: operator forgets the message text.
     await assert.rejects(runCommand(['send', 'development'], { routes: routes() }), (error) => error.exitCode === 2);
 });

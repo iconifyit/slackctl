@@ -96,6 +96,7 @@ test('parsePattern: slash form carries flags, bare form has none, stateful flags
 });
 
 test('parsePattern: a body that does not compile is a usage error naming the reason', () => {
+    // Scenario: an unterminated character class.
     assert.throws(() => parsePattern('/[/'), { message: /^Invalid pattern: / });
 });
 

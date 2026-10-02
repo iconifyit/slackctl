@@ -587,6 +587,13 @@ Every test file sets `process.env.TZ = 'America/New_York'` before its first `req
 | `deleteMessage` when Slack answers `cant_delete_message` | `SlackApiError` propagates |
 | `postMessage` | request carries `channel` and `text`; returns `{ ts }` from the response |
 
+### 9.5a Option helpers (`test/options.test.js`)
+
+| Scenario | Assertion |
+| --- | --- |
+| `effectiveLimit` with no bounds; with `--date`, `--ts-from`, or `--ts-to`; with an explicit `--limit` inside a range | 20; `undefined` (no cap) for each bound; the explicit value |
+| `effectiveBounds` with `--date`, one bound, the other bound, nothing | both bounds; `oldest` only; `latest` only; `{}` |
+
 ### 9.6 Commands end-to-end (`test/commands.test.js`, `test/commands-messages.test.js`, `test/commands-delete.test.js`, `test/commands-send.test.js`)
 
 One test file per command, so each step's commit carries its own tests and leaves the suite green on its own.

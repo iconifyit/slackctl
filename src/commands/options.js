@@ -88,26 +88,36 @@ const parsePatternOption = (value) => {
     }
 };
 
+/** @returns {Argument} The `<channel>` argument shared by every channel command. */
 const channelArgument = () => new Argument('<channel>', 'channel name or ID (see `slackctl channels`)');
 
+/** @returns {Option} `--limit <n>`, a positive integer with no commander default (see `effectiveLimit`). */
 const limitOption = () => new Option('--limit <n>', `maximum messages (default ${kDEFAULT_LIMIT}; no default inside a range or date)`).argParser(parsePositiveInteger);
 
+/** @returns {Option} `--mine`, restricting a query to the authenticated user's messages. */
 const mineOption = () => new Option('--mine', 'only messages posted by the authenticated user');
 
+/** @returns {Option} `--pattern <regex>`, parsed into a `RegExp`. */
 const patternOption = () => new Option('--pattern <regex>', 'only messages whose text matches, e.g. \'/testmember[0-9]+/i\'').argParser(parsePatternOption);
 
+/** @returns {Option} `--date <YYYY-MM-DD>`, parsed into a local-day ts range; conflicts with explicit bounds. */
 const dateOption = () => new Option('--date <YYYY-MM-DD>', 'only messages posted on that local calendar day').argParser(parseDate).conflicts(['tsFrom', 'tsTo']);
 
+/** @returns {Option} `--ts-from <ts>`, the inclusive lower bound. */
 const tsFromOption = () => new Option('--ts-from <ts>', 'inclusive lower bound (ts from the TS column)').argParser(parseTs);
 
+/** @returns {Option} `--ts-to <ts>`, the inclusive upper bound. */
 const tsToOption = () => new Option('--ts-to <ts>', 'inclusive upper bound (ts from the TS column)').argParser(parseTs);
 
+/** @returns {Option} `--ts <ts...>`, exact messages by timestamp; conflicts with every other selector. */
 const tsOption = () => new Option('--ts <ts...>', 'exact messages by ts; cannot be combined with other selectors')
     .argParser(collectTs)
     .conflicts(['date', 'limit', 'mine', 'pattern', 'select', 'tsFrom', 'tsTo']);
 
+/** @returns {Option} `--select`, the interactive pick before confirmation. */
 const selectOption = () => new Option('--select', 'pick messages from a numbered list before confirming');
 
+/** @returns {Option} `--dry-run`, preview only. */
 const dryRunOption = () => new Option('--dry-run', 'preview only; perform no changes');
 
 /**

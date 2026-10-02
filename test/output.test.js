@@ -146,6 +146,7 @@ test('confirm: only the exact word confirms', async () => {
 });
 
 test('confirm: writes the challenge to the output stream', async () => {
+    // Scenario: the challenge text goes to stderr, where prompts belong.
     const err      = capture();
     const prompter = output.createPrompter({ input: scriptedInput(['delete']), output: err });
 

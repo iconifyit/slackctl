@@ -7,7 +7,8 @@ const assert = require('node:assert/strict');
 
 const { SlackApiError } = require('../src/slack');
 const { MessageNotFoundError } = require('../src/messages');
-const { runCommand } = require('./helpers/context');
+const { createProgram } = require('../bin/slackctl');
+const { fakeContext, runCommand } = require('./helpers/context');
 const { historyRoute } = require('./helpers/fake-slack');
 
 const kAUTH        = require('./fixtures/auth-test.json');
@@ -55,18 +56,12 @@ test('delete: typing delete removes the candidates newest first and reports succ
 test('delete: stops at the first failure and reports how far it got', async () => {
     // Scenario: the second message belongs to Dana and the token may not delete it.
     const chatDelete = [kOK_DELETE, { body: { error: 'cant_delete_message', ok: false } }, kOK_DELETE];
-    let harness;
+    const harness    = fakeContext({ routes: routes(kDEVELOPMENT, chatDelete), stdinLines: ['delete'] });
 
     await assert.rejects(
-        runCommand(['delete', 'development', '--limit', '3'], { routes: routes(kDEVELOPMENT, chatDelete), stdinLines: ['delete'] }).then((result) => { harness = result; }),
+        createProgram(harness.context).parseAsync(['node', 'slackctl', 'delete', 'development', '--limit', '3']),
         (error) => error instanceof SlackApiError && error.code === 'cant_delete_message',
     );
-    // The harness is not returned on rejection; re-run with the same inputs to inspect streams and calls.
-    const probe = { routes: routes(kDEVELOPMENT, chatDelete), stdinLines: ['delete'] };
-    const { fakeContext } = require('./helpers/context');
-    const { createProgram } = require('../bin/slackctl');
-    harness = fakeContext(probe);
-    await assert.rejects(createProgram(harness.context).parseAsync(['node', 'slackctl', 'delete', 'development', '--limit', '3']));
 
     assert.deepEqual(deletedTs(harness.calls), kNEWEST_THREE.slice(0, 2), 'the third delete is never attempted');
     assert.match(harness.stderr.text, /Deleted 1 of 3\. Failed on 1790875200\.000500: cant_delete_message\n/);
@@ -97,6 +92,7 @@ test('delete --dry-run: works without a terminal', async () => {
 });
 
 test('delete: nothing matching prints a notice and asks nothing', async () => {
+    // Scenario: a pattern no message in #development contains.
     const { stdout, stderr } = await runCommand(['delete', 'development', '--pattern', 'kubernetes'], { routes: routes(kDEVELOPMENT) });
 
     assert.equal(stdout.text, 'No messages matched.\n');
@@ -116,8 +112,6 @@ test('delete --ts: previews exactly the given messages and deletes them in the g
 
 test('delete --ts: one unknown timestamp fails before anything is deleted', async () => {
     // Scenario: a typo in the second timestamp.
-    const { fakeContext } = require('./helpers/context');
-    const { createProgram } = require('../bin/slackctl');
     const harness = fakeContext({ routes: routes(kDEVELOPMENT), stdinLines: ['delete'] });
 
     await assert.rejects(
@@ -134,6 +128,7 @@ test('delete --ts: a repeated timestamp is a usage error, so one message is neve
 });
 
 test('delete --ts: cannot be combined with other selectors', async () => {
+    // Scenario: --ts paired with each other selector in turn.
     for (const extra of [['--limit', '5'], ['--mine'], ['--pattern', 'x'], ['--date', '2026-09-30'], ['--ts-from', '1790800920.000300'], ['--select']]) {
         await assert.rejects(runCommand(['delete', 'development', '--ts', '1790800920.000300', ...extra], { routes: routes(kDEVELOPMENT) }), usageError, extra.join(' '));
     }
@@ -157,6 +152,7 @@ test('delete --ts-from --ts-to: previews every message in the inclusive range an
 });
 
 test('delete: reversed range and date combined with a bound are usage errors', async () => {
+    // Scenario: --ts-from later than --ts-to; --date together with --ts-from.
     await assert.rejects(runCommand(['delete', 'development', '--ts-from', '1790871420.000200', '--ts-to', '1790797200.000700'], { routes: routes(kDEVELOPMENT) }), usageError);
     await assert.rejects(runCommand(['delete', 'development', '--date', '2026-09-30', '--ts-from', '1790797200.000700'], { routes: routes(kDEVELOPMENT) }), usageError);
 });
@@ -191,6 +187,7 @@ test('delete --select: deletes exactly the picked candidates after a second prev
 });
 
 test('delete --select: three bad answers abort with nothing deleted', async () => {
+    // Scenario: operator answers out of range three times.
     const { stdout, calls } = await runCommand(['delete', 'development', '--limit', '4', '--select'], { routes: routes(kDEVELOPMENT), stdinLines: ['9', '9', '9'] });
 
     assert.match(stdout.text, /Aborted\. Nothing deleted\.\n$/);
@@ -198,6 +195,7 @@ test('delete --select: three bad answers abort with nothing deleted', async () =
 });
 
 test('delete --select --dry-run: picks, shows the selection, and exits without asking for confirmation', async () => {
+    // Scenario: operator previews a pick without committing to it.
     const { stdout, stderr, calls } = await runCommand(['delete', 'development', '--limit', '4', '--select', '--dry-run'], { routes: routes(kDEVELOPMENT), stdinLines: ['1'] });
 
     assert.match(stdout.text, /Selected:\n\nDATE[^\n]*\n[^\n]*1790879520\.000100[^\n]*\nDry run\. Nothing deleted\.\n$/);
