@@ -3,6 +3,7 @@
 **Governing ADR**: [ADR-001 0.0.5](../ADR-001-slackctl-cli-architecture-0.0.5.md) (Accepted 2026-10-02)
 **Version**: 0.0.2 (supersedes [0.0.1](./ADR-001-slackctl-cli-architecture-implementation-plan-0.0.1.md))
 **Date**: 2026-10-02
+**Owner decisions since 0.0.1**: the transport client and the two domain services are classes with private fields and constructor injection, decided by the owner (Scott Lewis) on 2026-10-02 after weighing the closure-factory alternative; see section 7.2 item 7.
 **Governing principles**: SEP² (the preamble of `~/.claude/CLAUDE.md`). Section 7 maps this plan to those principles and argues every deviation.
 
 ## 1. Scope Contract
