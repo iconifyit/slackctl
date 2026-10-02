@@ -15,6 +15,7 @@ const { MessageNotFoundError } = require('../src/messages');
 const auth = require('../src/commands/auth');
 const channels = require('../src/commands/channels');
 const messages = require('../src/commands/messages');
+const remove = require('../src/commands/delete');
 
 const kEXIT_RUNTIME_ERROR = 1;
 const kEXIT_USAGE_ERROR   = 2;
@@ -108,7 +109,7 @@ const createProgram = (context) => {
             writeOut : (text) => context.stdout.write(text),
         });
 
-    for (const { register } of [auth, channels, messages]) {
+    for (const { register } of [auth, channels, messages, remove]) {
         register(program, context);
     }
 
