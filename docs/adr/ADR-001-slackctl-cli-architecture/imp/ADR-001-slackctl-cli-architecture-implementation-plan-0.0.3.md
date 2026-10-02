@@ -1,11 +1,7 @@
-# [DEPRECATED]
-
-Superseded by [0.0.3](./ADR-001-slackctl-cli-architecture-implementation-plan-0.0.3.md).
-
 # Implementation Plan: ADR-001 slackctl CLI Architecture
 
 **Governing ADR**: [ADR-001 0.0.6](../ADR-001-slackctl-cli-architecture-0.0.6.md) (Accepted 2026-10-02)
-**Version**: 0.0.2 (supersedes [0.0.1](./ADR-001-slackctl-cli-architecture-implementation-plan-0.0.1.md))
+**Version**: 0.0.3 (supersedes [0.0.2](./ADR-001-slackctl-cli-architecture-implementation-plan-0.0.2.md))
 **Date**: 2026-10-02
 **Owner decisions since 0.0.1**: the transport client and the two domain services are classes with private fields and constructor injection, decided by the owner (Scott Lewis) on 2026-10-02 after weighing the closure-factory alternative; see section 7.2 item 7.
 **Governing principles**: SEP² (the preamble of `~/.claude/CLAUDE.md`). Section 7 maps this plan to those principles and argues every deviation.
@@ -97,7 +93,8 @@ All source is CommonJS with `'use strict'`. The transport client and the two dom
 | `SlackClient` | class | The client. `constructor({ token, fetch, sleep, log })` stores the four collaborators in `#token`, `#fetch`, `#sleep`, `#log` |
 | `SlackClient#call(method, args)` | async method | One POST with retry-on-429 |
 | `SlackClient#paginate(method, args, pluck)` | async generator method | Cursor-following page iterator |
-| `SlackClient##post(method, args)` | private method | Builds and sends one request |
+| `SlackClient##post(method, args)` | private method | Builds and sends one form-encoded request |
+| `encodeArguments(args)` | module function | `URLSearchParams` of the arguments, omitting `undefined` values; form encoding because Slack reads some arguments (`conversations.list` `types`) only from a form body and accepts it on every method |
 | `defaultSleep(ms)` | module function | `setTimeout` promise; the default for `sleep` |
 | `retryAfterSeconds(response)`, `parseResponse(method, response)` | module functions | Pure helpers; no instance state |
 
@@ -330,7 +327,7 @@ client.call(method, args = {})           -> Promise<object>
 client.paginate(method, args, pluck)     -> AsyncGenerator<Array>
 ```
 
-- `call` POSTs JSON to `kSLACK_API_BASE + method` with `Authorization: Bearer <token>` and `Content-Type: application/json`.
+- `call` POSTs a form-encoded body (`application/x-www-form-urlencoded; charset=utf-8`) to `kSLACK_API_BASE + method` with `Authorization: Bearer <token>`. Form encoding is used for every method because Slack ignores `conversations.list`'s `types` argument when it arrives as JSON and silently returns public channels only; every Web API method accepts form encoding, so no per-method special case exists. `undefined` values are omitted; all others are stringified.
 - HTTP 429: read `Retry-After` (seconds; `kDEFAULT_RETRY_AFTER_SECONDS` if absent or unparsable), `log('Rate limited by Slack; waiting <n>s...')`, `await sleep(n * 1000)`, retry. On the `kMAX_ATTEMPTS`th consecutive 429, throw `SlackApiError(method, 'ratelimited')`.
 - Any other non-2xx status throws `Error('<method>: HTTP <status>')`.
 - Body with `ok: false` throws `SlackApiError(method, body.error)`.
@@ -522,7 +519,7 @@ Runner: `node --test test/` via `npm test`. Assertions: `node:assert/strict`. No
 
 | Helper | Contract |
 | --- | --- |
-| `test/helpers/fake-slack.js` → `createFakeSlack(routes)`, `historyRoute(messages, { maxPageSize })` | `createFakeSlack` returns `{ fetch, calls }`. `routes` maps a method name to one response, an ordered array consumed per request (pagination, 429 sequences), or a function of the request args. A response is `{ status = 200, headers = {}, body }`. `calls` is `[{ method, args, headers }]`. Requests to an unrouted method throw, so an unexpected call fails the test. `historyRoute` is a `conversations.history` route that behaves like Slack: newest first, honoring `oldest`, `latest`, `inclusive`, `limit`, and cursor paging, with an optional page-size cap modeling the restricted tier, so bounds and limits are asserted against Slack-like behavior rather than canned pages. |
+| `test/helpers/fake-slack.js` → `createFakeSlack(routes)`, `historyRoute(messages, { maxPageSize })` | `createFakeSlack` returns `{ fetch, calls }`. `routes` maps a method name to one response, an ordered array consumed per request (pagination, 429 sequences), or a function of the request args. A response is `{ status = 200, headers = {}, body }`. `calls` is `[{ method, args, headers, rawBody }]`, where `args` is the form body decoded back to the object the service sent (whole numbers to numbers, `true`/`false` to booleans, `ts` values left as strings) and `rawBody` is the encoded string. Requests to an unrouted method throw, so an unexpected call fails the test. `historyRoute` is a `conversations.history` route that behaves like Slack: newest first, honoring `oldest`, `latest`, `inclusive`, `limit`, and cursor paging, with an optional page-size cap modeling the restricted tier, so bounds and limits are asserted against Slack-like behavior rather than canned pages. |
 | `test/helpers/streams.js` → `scriptedInput(lines, { isTTY })`, `capture()` | A readable that yields the lines, with `isTTY` settable; a writable that collects text into `.text`. |
 | `test/helpers/context.js` → `fakeContext({ routes, token, stdinLines, isTTY })`, `runCommand(argv, options)` | `fakeContext` assembles a `CommandContext` over the two helpers with a real `SlackClient` (`new SlackClient({ token, fetch, sleep: async () => {}, log })`). `runCommand` builds the program over it and runs `parseAsync`, resolving with the harness or rejecting with the thrown error. |
 | `test/fixtures/*.json` | Realistic payloads: workspace `Vectopus`, user `Scott Lewis` / `U01234567`; channels `general`, `development`, `client-project` (private), `random`, `signups`; `development` history by Scott and one other user; `signups` history of eleven app-posted `New signup: ...` notices with `bot_id`, `username: 'VectorIcons Messenger'`, and `<mailto:...|...>` markup (mailboxes under `example.invalid`, never routable addresses), spread across 2026-09-30 and 2026-10-01 in `America/New_York`. |
@@ -534,6 +531,7 @@ Every test file sets `process.env.TZ = 'America/New_York'` before its first `req
 | Scenario | Assertion | Uncertainty removed |
 | --- | --- | --- |
 | `ok:false` body with `error: 'channel_not_found'` | throws `SlackApiError` with `method` and `code` | API errors surface as typed errors, not silent results |
+| `conversations.list` with `types`, a boolean, a number, and an `undefined` value | `rawBody` is `exclude_archived=true&limit=200&types=public_channel%2Cprivate_channel`; the `Content-Type` is form-encoded | Arguments reach Slack in the encoding it honors; `undefined` is omitted |
 | 429 with `Retry-After: 2`, then 200 | `sleep` called once with 2000; `log` called once with the wait line; result returned | Reactive wait honors Slack's number |
 | 429 with no `Retry-After`, then 200 | `sleep` called with 1000 | Missing header does not hang or crash |
 | 429 with `Retry-After: 0`, then 200; 429 with `Retry-After: 2junk`, then 200 | `sleep` called with 0; `sleep` called with 1000 | Zero is honored; a malformed header falls back rather than being partially parsed |

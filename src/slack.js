@@ -4,7 +4,8 @@
  * Slack Web API transport.
  *
  * Owns everything about speaking to Slack over HTTP: the bearer header, the
- * `ok:false` envelope, HTTP 429 with `Retry-After`, and cursor pagination.
+ * form-encoded request body, the `ok:false` envelope, HTTP 429 with
+ * `Retry-After`, and cursor pagination.
  * Nothing above this module knows about HTTP; nothing in this module knows
  * what a channel or a message means.
  */
@@ -33,6 +34,23 @@ class SlackApiError extends Error {
         this.code   = code;
     }
 }
+
+/**
+ * Encode request arguments the way every Slack Web API method accepts them.
+ *
+ * Slack reads some arguments only from a form-encoded body: `conversations.list`
+ * ignores `types` when it arrives as JSON and silently returns public channels
+ * only. Form encoding is accepted by every method, so it is used for all of
+ * them. Undefined values are omitted; everything else is stringified.
+ *
+ * @param {object} args - Request arguments.
+ * @returns {URLSearchParams}
+ */
+const encodeArguments = (args) => new URLSearchParams(
+    Object.entries(args)
+        .filter(([, value]) => value !== undefined)
+        .map(([key, value]) => [key, String(value)]),
+);
 
 /**
  * Resolve after `ms` milliseconds. Replaced in tests so retries do not wait.
@@ -169,7 +187,7 @@ class SlackClient {
     }
 
     /**
-     * Send one JSON POST with the bearer header.
+     * Send one form-encoded POST with the bearer header.
      *
      * @param {string} method - Slack API method name.
      * @param {object} args - JSON body.
@@ -179,10 +197,10 @@ class SlackClient {
         const send = this.#fetch;
 
         return send(`${kSLACK_API_BASE}${method}`, {
-            body    : JSON.stringify(args),
+            body    : encodeArguments(args),
             headers : {
                 Authorization  : `Bearer ${this.#token}`,
-                'Content-Type' : 'application/json',
+                'Content-Type' : 'application/x-www-form-urlencoded; charset=utf-8',
             },
             method  : 'POST',
         });

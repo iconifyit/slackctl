@@ -8,6 +8,25 @@
 const kSLACK_API_BASE = 'https://slack.com/api/';
 
 /**
+ * Decode a form-encoded request body into the argument object the service
+ * sent, undoing the transport's stringification: whole numbers become
+ * numbers, `true`/`false` become booleans, everything else (including Slack
+ * `ts` values, which carry a decimal point) stays a string.
+ *
+ * @param {URLSearchParams | string} body
+ * @returns {object}
+ */
+const decodeArguments = (body) => Object.fromEntries(
+    [...new URLSearchParams(String(body)).entries()].map(([key, value]) => {
+        if (value === 'true' || value === 'false') {
+            return [key, value === 'true'];
+        }
+
+        return [key, /^\d+$/.test(value) ? Number(value) : value];
+    }),
+);
+
+/**
  * Build a minimal `Response`-like object from a route entry.
  *
  * @param {{ status?: number, headers?: object, body?: object }} entry
@@ -59,7 +78,7 @@ const historyRoute = (messages, { maxPageSize = 1000 } = {}) => {
  * unexpected call fails the test loudly.
  *
  * @param {Object<string, object|object[]>} routes
- * @returns {{ fetch: Function, calls: Array<{ method: string, args: object, headers: object }> }}
+ * @returns {{ fetch: Function, calls: Array<{ method: string, args: object, headers: object, rawBody: string }> }}
  */
 const createFakeSlack = (routes) => {
     const calls  = [];
@@ -71,7 +90,7 @@ const createFakeSlack = (routes) => {
 
     const fetch = async (url, init) => {
         const method = url.slice(kSLACK_API_BASE.length);
-        calls.push({ args: JSON.parse(init.body), headers: init.headers, method });
+        calls.push({ args: decodeArguments(init.body), headers: init.headers, method, rawBody: String(init.body) });
 
         const route = routes[method];
 
@@ -80,7 +99,7 @@ const createFakeSlack = (routes) => {
         }
 
         if (typeof route === 'function') {
-            return toResponse(route(JSON.parse(init.body)));
+            return toResponse(route(decodeArguments(init.body)));
         }
 
         if (!Array.isArray(route)) {

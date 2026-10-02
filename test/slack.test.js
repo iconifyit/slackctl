@@ -24,7 +24,7 @@ const makeClient = (routes) => {
     return { calls: fake.calls, client, log, sleep };
 };
 
-test('call: sends a bearer-authenticated JSON POST and returns the ok body', async () => {
+test('call: sends a bearer-authenticated form-encoded POST and returns the ok body', async () => {
     // Scenario: one successful chat.postMessage to #development; no rate limiting.
     const { client, calls, sleep } = makeClient({
         'chat.postMessage': { body: { channel: kCHANNEL, ok: true, ts: '1759343520.000100' } },
@@ -35,10 +35,23 @@ test('call: sends a bearer-authenticated JSON POST and returns the ok body', asy
     assert.equal(result.ts, '1759343520.000100');
     assert.deepEqual(calls, [{
         args    : { channel: kCHANNEL, text: 'PR is ready for review.' },
-        headers : { Authorization: `Bearer ${kTOKEN}`, 'Content-Type': 'application/json' },
+        headers : { Authorization: `Bearer ${kTOKEN}`, 'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8' },
         method  : 'chat.postMessage',
+        rawBody : `channel=${kCHANNEL}&text=PR+is+ready+for+review.`,
     }]);
     assert.equal(sleep.mock.callCount(), 0);
+});
+
+test('call: arguments are form-encoded, so Slack honors them on every method', async () => {
+    // Scenario: the conversations.list request whose `types` Slack ignores when sent as JSON.
+    const { client, calls } = makeClient({
+        'conversations.list': { body: { channels: [], ok: true, response_metadata: { next_cursor: '' } } },
+    });
+
+    await client.call('conversations.list', { exclude_archived: true, limit: 200, types: 'public_channel,private_channel', unused: undefined });
+
+    assert.equal(calls[0].rawBody, 'exclude_archived=true&limit=200&types=public_channel%2Cprivate_channel');
+    assert.deepEqual(calls[0].args, { exclude_archived: true, limit: 200, types: 'public_channel,private_channel' });
 });
 
 test('call: ok:false becomes a SlackApiError carrying method and code', async () => {
