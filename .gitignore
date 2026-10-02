@@ -24,3 +24,6 @@ coverage
 .DS_Store
 .vscode/
 .idea/
+
+# Tool caches
+.cache_ggshield

@@ -1,11 +1,20 @@
 {
     "name": "slackctl",
     "version": "0.1.0",
-    "type": "module",
+    "description": "Slack admin CLI: inspect channels, list and delete messages, send messages",
     "bin": {
         "slackctl": "./bin/slackctl.js"
     },
+    "scripts": {
+        "test": "node --test test/*.test.js"
+    },
+    "engines": {
+        "node": ">=20"
+    },
     "dependencies": {
         "commander": "^14.0.0"
-    }
+    },
+    "author": "Scott Lewis <scott@sketchandbuild.com>",
+    "license": "UNLICENSED",
+    "private": true
 }
