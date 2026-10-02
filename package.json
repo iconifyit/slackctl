@@ -1,0 +1,11 @@
+{
+    "name": "slackctl",
+    "version": "0.1.0",
+    "type": "module",
+    "bin": {
+        "slackctl": "./bin/slackctl.js"
+    },
+    "dependencies": {
+        "commander": "^14.0.0"
+    }
+}
