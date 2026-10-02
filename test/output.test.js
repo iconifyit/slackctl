@@ -76,6 +76,14 @@ test('messageWidth: terminal width minus reserved, floored at 20; 100 when not a
     assert.equal(output.messageWidth(capture({ isTTY: false }), 50), 100);
 });
 
+test('messageWidth: a terminal that reports no column count gets the minimum width', () => {
+    // Scenario: a pseudo-terminal (as `expect` or `script` provide) with `columns` undefined.
+    const stream = capture({ isTTY: true });
+    stream.columns = undefined;
+
+    assert.equal(output.messageWidth(stream, 50), 20);
+});
+
 test('authorOf: user, then app username, then bot_id', () => {
     // Scenario: a human post, an app post with a display name, an app post with only a bot id.
     assert.equal(output.authorOf({ text: 'Looking into this now.', user: 'U01234567' }), 'U01234567');

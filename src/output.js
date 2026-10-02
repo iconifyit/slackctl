@@ -143,7 +143,8 @@ const messageWidth = (stream, reservedWidth) => {
         return kNON_TTY_MESSAGE_WIDTH;
     }
 
-    return Math.max(kMIN_MESSAGE_WIDTH, stream.columns - reservedWidth);
+    // A pseudo-terminal may report no column count; treat that as narrow rather than NaN.
+    return Math.max(kMIN_MESSAGE_WIDTH, (stream.columns ?? 0) - reservedWidth);
 };
 
 /**
