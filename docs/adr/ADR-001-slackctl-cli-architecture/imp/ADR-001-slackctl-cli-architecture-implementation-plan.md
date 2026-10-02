@@ -142,10 +142,10 @@ All source is CommonJS with `'use strict'`. The transport client and the two dom
 | `messageWidth(stream)` | function | Width available for `MESSAGE` |
 | `authorOf(message)` | function | `user`, else `username`, else `bot_id`, else `'unknown'` |
 | `isInteractive(stream)` | function | `Boolean(stream.isTTY)` |
-| `confirm(expectedWord, io)` | async function | Typed-word challenge |
-| `pick(count, io)` | async function | Numbered selection prompt with bounded retries |
+| `createPrompter({ input, output })` | function | One line reader for the life of a command run; returns `{ ask, write, close }` |
+| `confirm(expectedWord, prompter)` | async function | Typed-word challenge |
+| `pick(count, prompter)` | async function | Numbered selection prompt with bounded retries |
 | `parseSelection(expression, count)` | function | `1,3-5` / `all` grammar |
-| `readLine(io)` | internal async function | One line via `node:readline` |
 
 ### 3.5 `src/commands/*.js` (CLI Shell)
 
@@ -365,14 +365,16 @@ oneLine(text, maxWidth)           -> string    // whitespace runs and newlines t
 messageWidth(stream)              -> number    // stream.isTTY ? max(kMIN_MESSAGE_WIDTH, stream.columns - fixed columns - gutters) : kNON_TTY_MESSAGE_WIDTH
 authorOf(message)                 -> string
 isInteractive(stream)             -> boolean
-confirm(expectedWord, { input, output })   -> Promise<boolean>
-pick(count, { input, output })             -> Promise<number[] | null>
+createPrompter({ input, output })          -> { ask(prompt): Promise<string>, write(text): void, close(): void }
+confirm(expectedWord, prompter)            -> Promise<boolean>
+pick(count, prompter)                      -> Promise<number[] | null>
 parseSelection(expression, count)          -> number[]   // 0-based, ascending, unique; throws Error('Invalid selection: <token>')
 ```
 
 - `dayRange` constructs `new Date(y, m - 1, d)` and `new Date(y, m - 1, d + 1)` in the process timezone, validates that the first round-trips to the same `y-m-d` (rejects `2026-02-30`), and returns `oldest` as seconds with six decimals and `latest` as the next midnight minus one microsecond. The bound is therefore exclusive at Slack's precision while `inclusive: true` is sent, which keeps one code path for all bounds.
-- `confirm` writes `Type '<expectedWord>' to confirm: ` to `output`, reads one line from `input`, resolves `line.trim() === expectedWord`.
-- `pick` writes `Select messages to delete (e.g. 1,3-5 or all): `, reads a line, applies `parseSelection`; on error writes the error message to `output` and re-prompts; after `kCONFIRM_ATTEMPTS` failures resolves `null`.
+- `createPrompter` opens one `node:readline` interface over `input` and queues lines, so every prompt in a command run reads from the same reader. (Amended during step 2: the original design had `confirm` and `pick` each open their own reader, which loses the second answer when both arrive in one chunk, as a pipe or paste delivers them. A command creates one prompter, passes it to `pick` and `confirm`, and closes it when done.) `ask(prompt)` writes the prompt to `output` and resolves the next line, or `''` if `input` ends first.
+- `confirm` asks `Type '<expectedWord>' to confirm: ` and resolves `answer.trim() === expectedWord`.
+- `pick` asks `Select messages to delete (e.g. 1,3-5 or all): `, applies `parseSelection`; on error writes the error message and re-asks; after `kCONFIRM_ATTEMPTS` failures resolves `null`.
 
 ### 5.5 Command contract (`commands/*.js` → `bin/slackctl.js`)
 
