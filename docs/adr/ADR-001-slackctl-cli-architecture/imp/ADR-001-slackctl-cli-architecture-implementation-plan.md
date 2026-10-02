@@ -79,7 +79,7 @@ flowchart LR
 
 ## 3. Modules and implementation artifacts
 
-All source is CommonJS with `'use strict'`. Exported functions are arrow functions bound to `const` and carry JSDoc with parameters, return values, and thrown errors. Constants are `k`-prefixed `UPPER_SNAKE_CASE`. Object literals are colon-aligned. `else` sits on its own line. Early returns over nesting.
+All source is CommonJS with `'use strict'`. The transport client and the two domain services are classes with `#private` fields and constructor injection (see 7.2 item 7); module-level helpers and every other export are arrow functions bound to `const`. Everything exported carries JSDoc with parameters, return values, and thrown errors. Constants are `k`-prefixed `UPPER_SNAKE_CASE`. Object literals are colon-aligned. `else` sits on its own line. Early returns over nesting.
 
 ### 3.1 `src/slack.js` (Transport)
 
@@ -89,10 +89,12 @@ All source is CommonJS with `'use strict'`. Exported functions are arrow functio
 | `kMAX_ATTEMPTS` | constant `5` | Bound on consecutive 429 retries per call |
 | `kDEFAULT_RETRY_AFTER_SECONDS` | constant `1` | Used when a 429 carries no `Retry-After` |
 | `SlackApiError` | class extends `Error` | Carries `method` and Slack's `code`; the only error type the transport raises for `ok:false` |
-| `createSlackClient({ token, fetch, sleep, log })` | factory function | Builds a `SlackClient` closure over the token and the injected collaborators |
-| `SlackClient.call(method, args)` | async method | One POST with retry-on-429 |
-| `SlackClient.paginate(method, args, pluck)` | async generator method | Cursor-following page iterator |
-| `defaultSleep(ms)` | internal function | `setTimeout` promise; replaced in tests |
+| `SlackClient` | class | The client. `constructor({ token, fetch, sleep, log })` stores the four collaborators in `#token`, `#fetch`, `#sleep`, `#log` |
+| `SlackClient#call(method, args)` | async method | One POST with retry-on-429 |
+| `SlackClient#paginate(method, args, pluck)` | async generator method | Cursor-following page iterator |
+| `SlackClient##post(method, args)` | private method | Builds and sends one request |
+| `defaultSleep(ms)` | module function | `setTimeout` promise; the default for `sleep` |
+| `retryAfterSeconds(response)`, `parseResponse(method, response)` | module functions | Pure helpers; no instance state |
 
 ### 3.2 `src/conversations.js` (Domain Services)
 
@@ -103,9 +105,10 @@ All source is CommonJS with `'use strict'`. Exported functions are arrow functio
 | `kLIST_TYPES` | constant `'public_channel,private_channel'` | Channel types listed |
 | `ChannelNotFoundError` | class extends `Error` | `name` of the unmatched reference |
 | `AmbiguousChannelError` | class extends `Error` | `name` and `count` of matches |
-| `listChannels(client)` | async function | All non-archived channels across pages |
-| `resolveChannel(client, ref)` | async function | `ResolvedChannel` from a name or ID |
-| `normalizeReference(ref)` | internal function | Trims and strips one leading `#` |
+| `ConversationsService` | class | `constructor(client)` stores `#client` |
+| `ConversationsService#listChannels()` | async method | All non-archived channels across pages |
+| `ConversationsService#resolveChannel(ref)` | async method | `ResolvedChannel` from a name or ID |
+| `normalizeReference(ref)` | module function | Trims and strips one leading `#` |
 
 ### 3.3 `src/messages.js` (Domain Services)
 
@@ -114,13 +117,14 @@ All source is CommonJS with `'use strict'`. Exported functions are arrow functio
 | `kHISTORY_PAGE_SIZE` | constant `100` | `conversations.history` page size (ADR Decision 5) |
 | `kPATTERN_LITERAL` | constant `/^\/(.*)\/([a-z]*)$/s` | Recognizes the `/body/flags` form |
 | `MessageNotFoundError` | class extends `Error` | `ts` that was not found |
-| `parsePattern(expression)` | function | `RegExp` from `/body/flags` or a bare body |
-| `fetchMessages(client, query)` | async function | Newest-first matches up to `limit` within optional bounds |
-| `fetchMessagesByTs(client, { channel, tsList })` | async function | Exact messages by `ts`, all-or-nothing |
-| `deleteMessage(client, { channel, ts })` | async function | One `chat.delete` |
-| `postMessage(client, { channel, text })` | async function | One `chat.postMessage`, returns `{ ts }` |
-| `matches(message, { userId, pattern })` | internal predicate | AND of the author and pattern filters |
-| `historyArgs(query)` | internal function | Builds the `conversations.history` argument object from a `MessageQuery` |
+| `parsePattern(expression)` | module function | `RegExp` from `/body/flags` or a bare body; pure, needs no client |
+| `MessagesService` | class | `constructor(client)` stores `#client` |
+| `MessagesService#fetchMessages(query)` | async method | Newest-first matches up to `limit` within optional bounds |
+| `MessagesService#fetchMessagesByTs({ channel, tsList })` | async method | Exact messages by `ts`, all-or-nothing |
+| `MessagesService#deleteMessage({ channel, ts })` | async method | One `chat.delete` |
+| `MessagesService#postMessage({ channel, text })` | async method | One `chat.postMessage`, returns `{ ts }` |
+| `matches(message, { userId, pattern })` | module predicate | AND of the author and pattern filters |
+| `historyArgs(query)` | module function | Builds the `conversations.history` argument object from a `MessageQuery` |
 
 ### 3.4 `src/output.js` (Presentation)
 
@@ -237,6 +241,41 @@ classDiagram
 %%{init: {'theme':'base','themeVariables':{'fontFamily':'system-ui, sans-serif','primaryColor':'#e3cff3','primaryBorderColor':'#730FC3','primaryTextColor':'#293845','lineColor':'#788896'}}}%%
 classDiagram
   direction LR
+  class SlackClient {
+    -string token
+    -Function fetch
+    -Function sleep
+    -Function log
+    +call(method, args) Promise~object~
+    +paginate(method, args, pluck) AsyncGenerator~Array~
+  }
+  class ConversationsService {
+    -SlackClient client
+    +listChannels() Promise~SlackChannel[]~
+    +resolveChannel(ref) Promise~ResolvedChannel~
+  }
+  class MessagesService {
+    -SlackClient client
+    +fetchMessages(query) Promise~SlackMessage[]~
+    +fetchMessagesByTs(channel, tsList) Promise~SlackMessage[]~
+    +deleteMessage(channel, ts) Promise~void~
+    +postMessage(channel, text) Promise~object~
+  }
+  class CommandContext {
+    +getClient() SlackClient
+    +Readable stdin
+    +Writable stdout
+    +Writable stderr
+  }
+  ConversationsService --> SlackClient : uses
+  MessagesService --> SlackClient : uses
+  CommandContext --> SlackClient : lazily creates
+```
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'system-ui, sans-serif','primaryColor':'#e3cff3','primaryBorderColor':'#730FC3','primaryTextColor':'#293845','lineColor':'#788896'}}}%%
+classDiagram
+  direction LR
   class Error
   class SlackApiError {
     +string method
@@ -253,35 +292,32 @@ classDiagram
     +string ts
   }
   class MissingTokenError
+  class SlackClient
+  class ConversationsService
+  class MessagesService
+  class CommandContext
   Error <|-- SlackApiError
   Error <|-- ChannelNotFoundError
   Error <|-- AmbiguousChannelError
   Error <|-- MessageNotFoundError
   Error <|-- MissingTokenError
-  class SlackClient {
-    +call(method, args) Promise~object~
-    +paginate(method, args, pluck) AsyncGenerator~Array~
-  }
-  class CommandContext {
-    +getClient() SlackClient
-    +Readable stdin
-    +Writable stdout
-    +Writable stderr
-  }
   SlackClient ..> SlackApiError : throws
-  CommandContext --> SlackClient : lazily creates
+  ConversationsService ..> ChannelNotFoundError : throws
+  ConversationsService ..> AmbiguousChannelError : throws
+  MessagesService ..> MessageNotFoundError : throws
   CommandContext ..> MissingTokenError : throws
 ```
 
-`SlackClient` and `CommandContext` are plain objects produced by factories, not class instances; the diagram shows their shape. The five error classes are the only classes in the codebase.
+`SlackClient`, `ConversationsService`, `MessagesService`, and the five error classes are the classes in the codebase. None inherits from anything but `Error`. `CommandContext` is a plain object built by `createContext`; the diagram shows its shape.
 
 ## 5. Contracts between modules
 
 ### 5.1 Transport contract (`slack.js` → everyone above it)
 
 ```js
-createSlackClient({ token, fetch = globalThis.fetch, sleep = defaultSleep, log = console.error })
-  -> { call(method, args = {}), paginate(method, args, pluck) }
+new SlackClient({ token, fetch = globalThis.fetch, sleep = defaultSleep, log = console.error })
+client.call(method, args = {})           -> Promise<object>
+client.paginate(method, args, pluck)     -> AsyncGenerator<Array>
 ```
 
 - `call` POSTs JSON to `kSLACK_API_BASE + method` with `Authorization: Bearer <token>` and `Content-Type: application/json`.
@@ -289,13 +325,14 @@ createSlackClient({ token, fetch = globalThis.fetch, sleep = defaultSleep, log =
 - Any other non-2xx status throws `Error('<method>: HTTP <status>')`.
 - Body with `ok: false` throws `SlackApiError(method, body.error)`.
 - `paginate` yields `pluck(result)` per page. The first request has no `cursor` key; each later request carries `cursor` from the previous `response_metadata.next_cursor`; iteration ends when that value is empty or absent. The generator does not prefetch: a consumer that stops iterating after page N causes no request for page N+1.
-- `sleep` and `log` are injectable so the retry path is testable without real time.
+- `sleep` and `log` are injectable so the retry path is testable without real time. All four collaborators are `#private`; nothing outside the class can read the token.
 
 ### 5.2 Conversations contract (`conversations.js` → CLI Shell)
 
 ```js
-listChannels(client)         -> Promise<SlackChannel[]>
-resolveChannel(client, ref)  -> Promise<ResolvedChannel>
+new ConversationsService(client)
+service.listChannels()        -> Promise<SlackChannel[]>
+service.resolveChannel(ref)   -> Promise<ResolvedChannel>
 ```
 
 - `listChannels` requests `{ types: kLIST_TYPES, exclude_archived: true, limit: kLIST_PAGE_SIZE }` on every page and concatenates `result.channels`.
@@ -304,11 +341,12 @@ resolveChannel(client, ref)  -> Promise<ResolvedChannel>
 ### 5.3 Messages contract (`messages.js` → CLI Shell)
 
 ```js
-parsePattern(expression)                                 -> RegExp
-fetchMessages(client, MessageQuery)                      -> Promise<SlackMessage[]>
-fetchMessagesByTs(client, { channel, tsList })           -> Promise<SlackMessage[]>
-deleteMessage(client, { channel, ts })                   -> Promise<void>
-postMessage(client, { channel, text })                   -> Promise<{ ts }>
+parsePattern(expression)                                 -> RegExp     // module function
+new MessagesService(client)
+service.fetchMessages(MessageQuery)                      -> Promise<SlackMessage[]>
+service.fetchMessagesByTs({ channel, tsList })           -> Promise<SlackMessage[]>
+service.deleteMessage({ channel, ts })                   -> Promise<void>
+service.postMessage({ channel, text })                   -> Promise<{ ts }>
 ```
 
 - `parsePattern`: `kPATTERN_LITERAL` splits body and flags; otherwise the whole value is the body with no flags. A `RegExp` construction error is rethrown as `Error('Invalid pattern: <original message>')`.
@@ -343,6 +381,7 @@ register(program, context)   // context: CommandContext
 ```
 
 - A command never reads `process.env`, `process.stdin`, `process.stdout`, or `process.stderr` directly; it uses `context`. This is what makes the end-to-end tests possible without spawning a process.
+- A command constructs the services it needs from `context.getClient()` at the start of its action (`new ConversationsService(client)`, `new MessagesService(client)`); services are not shared through the context because each command run is one process and construction is free.
 - A command never calls `process.exit`. It returns normally for exit 0, throws one of the error classes for exit 1, or calls `command.error(message, { exitCode: 2 })` for a usage error discovered after parsing (the reversed range).
 - Option parsing uses commander argument parsers from `options.js` that throw `commander.InvalidArgumentError`; mutual exclusions are declared with `Option.conflicts`. Commander turns both into usage errors (exit 2) with no custom plumbing.
 
@@ -378,7 +417,7 @@ Per-command behavior:
 | Any other error | `slackctl: <message>` on stderr | 1 |
 | Usage error (commander) | commander's message on stderr | 2 |
 
-`createContext` builds `getClient` lazily: the token is read on first call, `MissingTokenError` (`SLACK_ADMIN_TOKEN is not set.`) is thrown if empty, and the client is memoized. `help` and usage errors therefore never need the token, while every real command fails before any network call.
+`createContext` builds `getClient` lazily: the token is read on first call, `MissingTokenError` (`SLACK_ADMIN_TOKEN is not set.`) is thrown if empty, and the `SlackClient` instance is memoized. `help` and usage errors therefore never need the token, while every real command fails before any network call.
 
 ## 6. Runtime flow
 
@@ -426,7 +465,7 @@ sequenceDiagram
 | 3 Intent Before Implementation | The ADR resolved every requirement conflict (name vs ID, whose messages, `send`, module system, selection modes, confirmation word) before this plan; the plan implements intent, not the task's literal examples. |
 | 4 Drive Toward Implementation | Page size (Decision 5) is a constant validated live rather than designed around; nine steps, each green. |
 | 5 Visualize Architecture | ADR component diagram; this plan's module, schema, and sequence diagrams, all rendered and checked before writing. |
-| 6 Engineering Standards | SRP per module (Section 2); composition over inheritance (factories and closures, five small error classes only); explicit injection over magic; JS style rule applied verbatim (Section 3 preamble). |
+| 6 Engineering Standards | SRP per module (Section 2); composition over inheritance (no class extends anything but `Error`; services receive the client by constructor injection); explicit injection over magic; JS style rule applied verbatim (Section 3 preamble). |
 | 7 Verification | Section 9; `npm test` green after every step; `node --check`; live smoke with recorded outcome. |
 | 8 Transparency | Section 7.2 below; Risks in Section 8; the plan is amended in a new version if implementation proves it wrong. |
 | 9 Operational Wrappers | `slackctl` is the wrapper: it validates the token before any call, resolves the channel, previews, and confirms, so nobody runs raw `chat.delete`. |
@@ -447,6 +486,8 @@ sequenceDiagram
 5. **Tests spy on request arguments (`calls`), which the test-design rule calls implementation bonding.** For a transport whose entire contract is "send this request shape to Slack", the request shape *is* the observable behavior; there is no other output to assert. The spy is used only to assert the contract (`exclude_archived: true` is sent, no `chat.delete` happens on dry run, the cursor is forwarded), never call order or internal structure.
 
 6. **`fetchMessages` stops the generator early rather than draining it.** This is a performance choice that leaks into the contract ("does not prefetch"). It is stated as a contract because on a rate-limited tier an extra page costs a minute, which makes it behavior the operator can observe. It is tested as such.
+
+7. **`SlackClient`, `ConversationsService`, and `MessagesService` are classes.** The architectural-decomposition skill says not to default to classes, and a closure-based factory would give the same injection with free privacy and bound methods. The owner chose classes after weighing both (2026-10-02): a named type that appears in stack traces, JSDoc, and the diagrams as drawn, and one construction style across the client, the services, and the error types, consistent with the service-oriented structure the persona rule prefers. The mechanical arguments for the closure do not bite here: nothing detaches a method, so `this` binding is not at risk, and `#private` fields keep the token as unreachable as a closure would. What the class must not become is a base class; no inheritance is permitted beyond `extends Error`, and a reviewer should treat an `extends SlackClient` or `extends MessagesService` as a defect.
 
 ## 8. Risks and edge cases
 
@@ -469,7 +510,7 @@ Runner: `node --test test/` via `npm test`. Assertions: `node:assert/strict`. No
 | --- | --- |
 | `test/helpers/fake-slack.js` → `createFakeSlack(routes)` | Returns `{ fetch, calls }`. `routes` maps a method name to one response or an ordered array consumed per request (pagination, 429 sequences). A response is `{ status = 200, headers = {}, body }`. `calls` is `[{ method, args }]`. Requests to an unrouted method throw, so an unexpected call fails the test. |
 | `test/helpers/streams.js` → `scriptedInput(lines, { isTTY })`, `capture()` | A readable that yields the lines, with `isTTY` settable; a writable that collects text into `.text`. |
-| `test/helpers/context.js` → `fakeContext({ routes, token, stdinLines, isTTY })` | Assembles a `CommandContext` over the two helpers with a real `createSlackClient` and a no-op `sleep`. |
+| `test/helpers/context.js` → `fakeContext({ routes, token, stdinLines, isTTY })` | Assembles a `CommandContext` over the two helpers with a real `SlackClient` (`new SlackClient({ token, fetch, sleep: async () => {}, log })`). |
 | `test/fixtures/*.json` | Realistic payloads: workspace `Vectopus`, user `Scott Lewis` / `U01234567`; channels `general`, `development`, `client-project` (private), `random`, `signups`; `development` history by Scott and one other user; `signups` history of eleven app-posted `New signup: ...` notices with `bot_id`, `username: 'VectorIcons Messenger'`, and `<mailto:...|...>` markup, spread across 2026-09-30 and 2026-10-01 in `America/New_York`. |
 
 Every test file sets `process.env.TZ = 'America/New_York'` before its first `require`. Every test states its scenario in a leading comment.
