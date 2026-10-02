@@ -153,11 +153,11 @@ Each file exports exactly `register(program, context)`. Shared option parsers li
 
 | File | Artifacts |
 | --- | --- |
-| `options.js` | `parsePositiveInteger(value)`, `parseTs(value)`, `parseDate(value)` (wraps `dayRange`), `parsePatternOption(value)` (wraps `parsePattern`), `channelArgument` (shared `Argument`), `limitOption`, `mineOption`, `patternOption`, `dateOption`, `tsFromOption`, `tsToOption`, `tsOption`, `selectOption`, `dryRunOption` (shared `Option` instances, including `.conflicts()` declarations); every parser throws `commander.InvalidArgumentError` |
+| `options.js` | Parsers `parsePositiveInteger(value)`, `parseTs(value)`, `collectTs(value, previous)` (variadic `--ts` accumulator), `parseDate(value)` (wraps `dayRange`), `parsePatternOption(value)` (wraps `parsePattern`), each throwing `commander.InvalidArgumentError`; factories `channelArgument()`, `limitOption()`, `mineOption()`, `patternOption()`, `dateOption()`, `tsFromOption()`, `tsToOption()`, `tsOption()`, `selectOption()`, `dryRunOption()` returning fresh `Argument`/`Option` instances with their `.conflicts()` declarations (amended during step 6: commander mutates an `Option` when it is attached, so instances are not shared between commands); `validateRange(options, command)` for the reversed-range check; `effectiveLimit(options)`; `effectiveBounds(options)` |
 | `auth.js` | `register`, `tokenType(token)` |
 | `channels.js` | `register`, `toChannelRow(channel)` |
-| `messages.js` | `register`, `toMessageRow(message, width)` (shared with `delete.js` through `options.js`? No: it lives in `messages.js` and `delete.js` imports it; see 3.7) |
-| `delete.js` | `register`, `buildCandidates(client, channel, options)`, `effectiveLimit(options)`, `runDeletion(client, channel, messages, io)` |
+| `messages.js` | `register`, `messageTable(messages, stdout, { numbered })` (renders the DATE/TS/USER/MESSAGE table, computing the MESSAGE width from the other columns), `queryMessages({ client, messages, channel, options })` (the candidate set a set of options selects, including the `auth.test` lookup for `--mine`); both imported by `delete.js`, see 3.7 |
+| `delete.js` | `register`, `buildCandidates({ client, messages, channel, options })` (explicit `--ts` or `queryMessages`), `runDeletion({ messages, channel, chosen, context })` |
 | `send.js` | `register` |
 
 ### 3.6 `bin/slackctl.js` (CLI Shell)
@@ -167,13 +167,13 @@ Each file exports exactly `register(program, context)`. Shared option parsers li
 | `kFRIENDLY_ERRORS` | constant map | Slack error code → actionable message (the ADR's listed codes) |
 | `kEXIT_RUNTIME_ERROR` | constant `1` | |
 | `MissingTokenError` | class extends `Error` | Thrown by `getClient` when the token is absent |
-| `createContext({ env, stdin, stdout, stderr })` | function | Builds `CommandContext` with a memoized, lazy `getClient` |
+| `createContext({ env, stdin, stdout, stderr })` | function | Builds `CommandContext` with a lazy `getToken` and a memoized, lazy `getClient` (amended during step 5: `auth` classifies the token by prefix, so the context exposes `getToken` alongside `getClient`; both throw `MissingTokenError` when the variable is empty) |
 | `createProgram(context)` | function | Builds the commander program and registers commands |
 | `run(argv)` | async function | `parseAsync`, error-to-exit-code mapping; invoked only when `require.main === module` |
 
 ### 3.7 Cross-cutting note on `toMessageRow`
 
-`messages` and `delete` render identical rows. `toMessageRow` lives in `src/commands/messages.js` and `delete.js` imports it. This is a sibling import within the CLI Shell subsystem, not a layering violation, and avoids a one-function module.
+`messages` and `delete` render identical rows and select candidates identically. `messageTable` and `queryMessages` live in `src/commands/messages.js` and `delete.js` imports them. This is a sibling import within the CLI Shell subsystem, not a layering violation, and avoids a one-function module.
 
 ## 4. Object schemas
 
@@ -263,6 +263,7 @@ classDiagram
   }
   class CommandContext {
     +getClient() SlackClient
+    +getToken() string
     +Readable stdin
     +Writable stdout
     +Writable stderr
@@ -382,7 +383,7 @@ parseSelection(expression, count)          -> number[]   // 0-based, ascending, 
 register(program, context)   // context: CommandContext
 ```
 
-- A command never reads `process.env`, `process.stdin`, `process.stdout`, or `process.stderr` directly; it uses `context`. This is what makes the end-to-end tests possible without spawning a process.
+- `context` is `{ getClient, getToken, stdin, stdout, stderr }` (amended during step 5: `getToken` added so `auth` can classify the token prefix; only `auth` calls it). A command never reads `process.env`, `process.stdin`, `process.stdout`, or `process.stderr` directly; it uses `context`. This is what makes the end-to-end tests possible without spawning a process.
 - A command constructs the services it needs from `context.getClient()` at the start of its action (`new ConversationsService(client)`, `new MessagesService(client)`); services are not shared through the context because each command run is one process and construction is free.
 - A command never calls `process.exit`. It returns normally for exit 0, throws one of the error classes for exit 1, or calls `command.error(message, { exitCode: 2 })` for a usage error discovered after parsing (the reversed range).
 - Option parsing uses commander argument parsers from `options.js` that throw `commander.InvalidArgumentError`; mutual exclusions are declared with `Option.conflicts`. Commander turns both into usage errors; the program's `exitOverride` normalizes them to exit 2 (amended during step 6: commander's own default usage exit code is 1, not 2 as the ADR's parenthetical states; the override is installed before subcommands are created so they inherit it, and `run` maps CommanderError exit codes straight through).
@@ -510,9 +511,9 @@ Runner: `node --test test/` via `npm test`. Assertions: `node:assert/strict`. No
 
 | Helper | Contract |
 | --- | --- |
-| `test/helpers/fake-slack.js` → `createFakeSlack(routes)` | Returns `{ fetch, calls }`. `routes` maps a method name to one response or an ordered array consumed per request (pagination, 429 sequences). A response is `{ status = 200, headers = {}, body }`. `calls` is `[{ method, args }]`. Requests to an unrouted method throw, so an unexpected call fails the test. |
+| `test/helpers/fake-slack.js` → `createFakeSlack(routes)`, `historyRoute(messages, { maxPageSize })` | `createFakeSlack` returns `{ fetch, calls }`. `routes` maps a method name to one response, an ordered array consumed per request (pagination, 429 sequences), or a function of the request args. A response is `{ status = 200, headers = {}, body }`. `calls` is `[{ method, args, headers }]`. Requests to an unrouted method throw, so an unexpected call fails the test. `historyRoute` (added during step 3) is a `conversations.history` route that behaves like Slack: newest first, honoring `oldest`, `latest`, `inclusive`, `limit`, and cursor paging, with an optional page-size cap modeling the restricted tier, so bounds and limits are asserted against Slack-like behavior rather than canned pages. |
 | `test/helpers/streams.js` → `scriptedInput(lines, { isTTY })`, `capture()` | A readable that yields the lines, with `isTTY` settable; a writable that collects text into `.text`. |
-| `test/helpers/context.js` → `fakeContext({ routes, token, stdinLines, isTTY })` | Assembles a `CommandContext` over the two helpers with a real `SlackClient` (`new SlackClient({ token, fetch, sleep: async () => {}, log })`). |
+| `test/helpers/context.js` → `fakeContext({ routes, token, stdinLines, isTTY })`, `runCommand(argv, options)` | `fakeContext` assembles a `CommandContext` over the two helpers with a real `SlackClient` (`new SlackClient({ token, fetch, sleep: async () => {}, log })`). `runCommand` builds the program over it and runs `parseAsync`, resolving with the harness or rejecting with the thrown error. |
 | `test/fixtures/*.json` | Realistic payloads: workspace `Vectopus`, user `Scott Lewis` / `U01234567`; channels `general`, `development`, `client-project` (private), `random`, `signups`; `development` history by Scott and one other user; `signups` history of eleven app-posted `New signup: ...` notices with `bot_id`, `username: 'VectorIcons Messenger'`, and `<mailto:...|...>` markup, spread across 2026-09-30 and 2026-10-01 in `America/New_York`. |
 
 Every test file sets `process.env.TZ = 'America/New_York'` before its first `require`. Every test states its scenario in a leading comment.
@@ -575,7 +576,9 @@ Every test file sets `process.env.TZ = 'America/New_York'` before its first `req
 | `deleteMessage` when Slack answers `cant_delete_message` | `SlackApiError` propagates |
 | `postMessage` | request carries `channel` and `text`; returns `{ ts }` from the response |
 
-### 9.6 Commands end-to-end (`test/commands.test.js`)
+### 9.6 Commands end-to-end (`test/commands.test.js`, `test/commands-messages.test.js`, `test/commands-delete.test.js`, `test/commands-send.test.js`)
+
+(Amended during step 6: one test file per command so that each step's commit carries its own tests and leaves the suite green on its own.)
 
 Built with `createProgram(fakeContext(...))`, `program.exitOverride()`, `parseAsync(['node', 'slackctl', ...argv])`. Usage errors are asserted via the thrown `CommanderError.exitCode === 2`; runtime errors via the thrown error class.
 
