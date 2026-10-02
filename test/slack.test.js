@@ -3,7 +3,7 @@
 const { test, mock } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createSlackClient, SlackApiError } = require('../src/slack');
+const { SlackApiError, SlackClient } = require('../src/slack');
 const { createFakeSlack } = require('./helpers/fake-slack');
 
 const kTOKEN   = 'xoxp-test-not-a-real-token';
@@ -19,7 +19,7 @@ const makeClient = (routes) => {
     const fake   = createFakeSlack(routes);
     const sleep  = mock.fn(async () => {});
     const log    = mock.fn();
-    const client = createSlackClient({ fetch: fake.fetch, log, sleep, token: kTOKEN });
+    const client = new SlackClient({ fetch: fake.fetch, log, sleep, token: kTOKEN });
 
     return { calls: fake.calls, client, log, sleep };
 };

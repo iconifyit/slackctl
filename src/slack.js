@@ -78,31 +78,35 @@ const parseResponse = async (method, response) => {
 };
 
 /**
- * Create a Slack Web API client bound to one token.
+ * A Slack Web API client bound to one token.
  *
- * `fetch`, `sleep`, and `log` are injectable so the transport is testable
- * without a network or real time.
- *
- * @param {object} options
- * @param {string} options.token - Slack token sent as a bearer credential.
- * @param {typeof fetch} [options.fetch] - HTTP implementation; defaults to the global `fetch`.
- * @param {(ms: number) => Promise<void>} [options.sleep] - Wait implementation used on 429.
- * @param {(line: string) => void} [options.log] - Where rate-limit waits are reported; defaults to stderr.
- * @returns {{ call: Function, paginate: Function }} The client.
+ * `fetch`, `sleep`, and `log` are injected so the transport is testable
+ * without a network or real time. All collaborators are private; nothing
+ * outside the class can read the token.
  *
  * @example
- * const client = createSlackClient({ token: process.env.SLACK_ADMIN_TOKEN });
+ * const client = new SlackClient({ token: process.env.SLACK_ADMIN_TOKEN });
  * const { user_id } = await client.call('auth.test');
  */
-const createSlackClient = ({ token, fetch = globalThis.fetch, sleep = defaultSleep, log = console.error }) => {
-    const post = (method, args) => fetch(`${kSLACK_API_BASE}${method}`, {
-        body    : JSON.stringify(args),
-        headers : {
-            Authorization  : `Bearer ${token}`,
-            'Content-Type' : 'application/json',
-        },
-        method  : 'POST',
-    });
+class SlackClient {
+    #token;
+    #fetch;
+    #sleep;
+    #log;
+
+    /**
+     * @param {object} options
+     * @param {string} options.token - Slack token sent as a bearer credential.
+     * @param {typeof fetch} [options.fetch] - HTTP implementation; defaults to the global `fetch`.
+     * @param {(ms: number) => Promise<void>} [options.sleep] - Wait implementation used on 429.
+     * @param {(line: string) => void} [options.log] - Where rate-limit waits are reported; defaults to stderr.
+     */
+    constructor({ token, fetch = globalThis.fetch, sleep = defaultSleep, log = console.error }) {
+        this.#token = token;
+        this.#fetch = fetch;
+        this.#sleep = sleep;
+        this.#log   = log;
+    }
 
     /**
      * Call one Slack Web API method.
@@ -117,12 +121,12 @@ const createSlackClient = ({ token, fetch = globalThis.fetch, sleep = defaultSle
      * @throws {SlackApiError} On `ok: false`, or with code `ratelimited` when every attempt was a 429.
      * @throws {Error} On any other non-2xx HTTP status.
      */
-    const call = async (method, args = {}) => {
+    async call(method, args = {}) {
         let attempt = 0;
 
         while (true) {
             attempt += 1;
-            const response = await post(method, args);
+            const response = await this.#post(method, args);
 
             if (response.status !== kHTTP_TOO_MANY_REQUESTS) {
                 return parseResponse(method, response);
@@ -133,10 +137,10 @@ const createSlackClient = ({ token, fetch = globalThis.fetch, sleep = defaultSle
             }
 
             const seconds = retryAfterSeconds(response);
-            log(`Rate limited by Slack; waiting ${seconds}s...`);
-            await sleep(seconds * kMILLISECONDS_PER_SECOND);
+            this.#log(`Rate limited by Slack; waiting ${seconds}s...`);
+            await this.#sleep(seconds * kMILLISECONDS_PER_SECOND);
         }
-    };
+    }
 
     /**
      * Iterate a cursor-paginated method one page at a time.
@@ -151,18 +155,36 @@ const createSlackClient = ({ token, fetch = globalThis.fetch, sleep = defaultSle
      * @param {(body: object) => Array} pluck - Extracts the page's items from the body.
      * @yields {Array} One page of items.
      */
-    async function* paginate(method, args, pluck) {
+    async *paginate(method, args, pluck) {
         let cursor;
 
         do {
-            const body = await call(method, cursor ? { ...args, cursor } : args);
+            const body = await this.call(method, cursor ? { ...args, cursor } : args);
             yield pluck(body);
             cursor = body.response_metadata?.next_cursor;
         }
         while (cursor);
     }
 
-    return { call, paginate };
-};
+    /**
+     * Send one JSON POST with the bearer header.
+     *
+     * @param {string} method - Slack API method name.
+     * @param {object} args - JSON body.
+     * @returns {Promise<Response>}
+     */
+    #post(method, args) {
+        const send = this.#fetch;
 
-module.exports = { SlackApiError, createSlackClient };
+        return send(`${kSLACK_API_BASE}${method}`, {
+            body    : JSON.stringify(args),
+            headers : {
+                Authorization  : `Bearer ${this.#token}`,
+                'Content-Type' : 'application/json',
+            },
+            method  : 'POST',
+        });
+    }
+}
+
+module.exports = { SlackApiError, SlackClient };
