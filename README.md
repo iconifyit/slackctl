@@ -74,9 +74,9 @@ In the app's sidebar open **OAuth & Permissions**, scroll to **Scopes**, and und
 | `groups:history` | read messages in private channels |
 | `chat:write` | delete messages and send messages as you |
 
-Leave **Bot Token Scopes** empty; slackctl does not use a bot token.
+Click **Add an OAuth Scope** under **User Token Scopes** once per scope. Leave **Bot Token Scopes** empty; slackctl does not use a bot token. Do not add `admin` or any write scope beyond `chat:write`: the tool never calls those methods, and the ability to delete other people's messages comes from your workspace role, not from a scope (see below).
 
-![OAuth & Permissions page showing the User Token Scopes list](docs/images/slack-04-user-token-scopes.jpg)
+![OAuth & Permissions page, Scopes section, showing where User Token Scopes are added](docs/images/slack-04-user-token-scopes.jpg)
 
 ### 5. Install the app and copy the user token
 
@@ -96,9 +96,9 @@ export SLACK_ADMIN_TOKEN=xoxp-...
 echo 'SLACK_ADMIN_TOKEN=xoxp-...' > .env
 node --env-file=.env bin/slackctl.js auth
 
-# c) inline, on the same line and before the command
-SLACK_ADMIN_TOKEN=xoxp-... slackctl auth
 ```
+
+Avoid typing the token inline on a command line (`SLACK_ADMIN_TOKEN=xoxp-... slackctl ...`): most shells record the whole command in their history file.
 
 Then confirm:
 
@@ -146,6 +146,9 @@ Every command that takes a `<channel>` accepts a channel **name** (`signups`, `#
 Usage: slackctl auth [options]
 
 show the workspace and user the token belongs to
+
+Options:
+  -h, --help  display help for command
 ```
 
 ### `channels`
@@ -154,6 +157,9 @@ show the workspace and user the token belongs to
 Usage: slackctl channels [options]
 
 list channels with their IDs
+
+Options:
+  -h, --help  display help for command
 ```
 
 ```text
@@ -226,7 +232,7 @@ Options:
   -h, --help           display help for command
 ```
 
-Every `delete` run prints the candidates first, then requires you to type `delete` at an interactive terminal. There is no flag that skips the confirmation. Messages are deleted one at a time, newest first; on the first refusal from Slack the run stops and reports how far it got. Slack has no undo.
+Every `delete` run prints the candidates first, then requires you to type `delete` at an interactive terminal. There is no flag that skips the confirmation. Messages are deleted one at a time in the order shown in the preview (newest first, or the order you gave with `--ts`); on the first refusal from Slack the run stops and reports how far it got. Slack has no undo.
 
 #### Newest N messages
 
@@ -238,7 +244,7 @@ slackctl delete general --limit 3
 
 #### Only your own messages
 
-`--mine` keeps only messages posted by the token's user. It combines with any other selector.
+`--mine` keeps only messages posted by the token's user. It combines with `--limit`, `--pattern`, `--date`, and the `--ts-from`/`--ts-to` range, but not with `--ts`, which already names its messages.
 
 ```bash
 slackctl delete development --mine --limit 10
@@ -310,7 +316,7 @@ Deletion successful. 2 messages deleted.
 
 #### Dry run
 
-`--dry-run` prints the preview (and performs the pick, with `--select`) and exits without asking for confirmation or deleting anything. It is the only `delete` form that works without a terminal, so it is safe in scripts and cron jobs.
+`--dry-run` prints the preview and exits without asking for confirmation or deleting anything. Without `--select` it is the one `delete` form that works without a terminal, so it is safe in scripts and cron jobs. With `--select` the pick still happens and still needs a terminal; a script that passes `--select --dry-run` exits 1 with `Interactive selection requires a terminal; drop --select for a non-interactive preview.`
 
 ```bash
 slackctl delete signups --date 2026-10-02 --pattern '/testmember[0-9]+/' --dry-run
