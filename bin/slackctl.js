@@ -16,6 +16,7 @@ const auth = require('../src/commands/auth');
 const channels = require('../src/commands/channels');
 const messages = require('../src/commands/messages');
 const remove = require('../src/commands/delete');
+const send = require('../src/commands/send');
 
 const kEXIT_RUNTIME_ERROR = 1;
 const kEXIT_USAGE_ERROR   = 2;
@@ -109,7 +110,7 @@ const createProgram = (context) => {
             writeOut : (text) => context.stdout.write(text),
         });
 
-    for (const { register } of [auth, channels, messages, remove]) {
+    for (const { register } of [auth, channels, messages, remove, send]) {
         register(program, context);
     }
 
