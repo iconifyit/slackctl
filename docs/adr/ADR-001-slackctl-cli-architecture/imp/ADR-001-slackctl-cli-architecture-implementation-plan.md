@@ -1,6 +1,6 @@
 # Implementation Plan: ADR-001 slackctl CLI Architecture
 
-Current version: [0.0.2](./ADR-001-slackctl-cli-architecture-implementation-plan-0.0.2.md) (governing ADR: [ADR-001 0.0.5](../ADR-001-slackctl-cli-architecture-0.0.5.md))
+Current version: [0.0.2](./ADR-001-slackctl-cli-architecture-implementation-plan-0.0.2.md) (governing ADR: [ADR-001 0.0.6](../ADR-001-slackctl-cli-architecture-0.0.6.md))
 
 ## Versions
 
