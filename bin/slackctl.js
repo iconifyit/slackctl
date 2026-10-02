@@ -17,7 +17,6 @@ const channels = require('../src/commands/channels');
 const messages = require('../src/commands/messages');
 const remove = require('../src/commands/delete');
 const send = require('../src/commands/send');
-const { NonInteractiveError } = require('../src/commands/delete');
 
 const kEXIT_RUNTIME_ERROR = 1;
 const kEXIT_USAGE_ERROR   = 2;
@@ -36,7 +35,7 @@ const kFRIENDLY_ERRORS = {
 };
 
 /** Errors whose message is printed verbatim, without the `slackctl:` prefix. */
-const kDOMAIN_ERRORS = [AmbiguousChannelError, ChannelNotFoundError, MessageNotFoundError, NonInteractiveError];
+const kDOMAIN_ERRORS = [AmbiguousChannelError, ChannelNotFoundError, MessageNotFoundError, remove.NonInteractiveError];
 
 /** `SLACK_ADMIN_TOKEN` is absent or empty. */
 class MissingTokenError extends Error {
