@@ -27,12 +27,14 @@ const toResponse = ({ status = 200, headers = {}, body = {} }) => ({
  * limits rather than on what a canned page happens to contain.
  *
  * @param {object[]} messages - Every message in the channel, any order.
+ * @param {{ maxPageSize?: number }} [options] - Cap on items per page, as Slack's restricted tier imposes.
  * @returns {(args: object) => { body: object }}
  */
-const historyRoute = (messages) => {
+const historyRoute = (messages, { maxPageSize = 1000 } = {}) => {
     const newestFirst = [...messages].sort((left, right) => Number(right.ts) - Number(left.ts));
 
     return ({ cursor, inclusive = false, latest, limit = 100, oldest }) => {
+        const pageSize = Math.min(limit, maxPageSize);
         const inRange = newestFirst.filter(({ ts }) => {
             const value = Number(ts);
             const aboveOldest = oldest === undefined || (inclusive ? value >= Number(oldest) : value > Number(oldest));
@@ -40,8 +42,8 @@ const historyRoute = (messages) => {
             return aboveOldest && belowLatest;
         });
         const offset = cursor ? Number(cursor) : 0;
-        const page   = inRange.slice(offset, offset + limit);
-        const next   = offset + limit < inRange.length ? String(offset + limit) : '';
+        const page   = inRange.slice(offset, offset + pageSize);
+        const next   = offset + pageSize < inRange.length ? String(offset + pageSize) : '';
 
         return { body: { messages: page, ok: true, response_metadata: { next_cursor: next } } };
     };
