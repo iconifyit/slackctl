@@ -618,6 +618,10 @@ Only on the owner's explicit go-ahead, in a scratch channel the owner names: `au
 
 ## 10. Verification plan
 
+### 10.0 Live smoke outcome (2026-10-02, #general, authorized by the owner)
+
+Run after step 9 against the vectoricons workspace with the owner's user token. `auth`, `channels`, `messages general --limit 3`, `delete general --dry-run --limit 1`, and `send general ... --dry-run` behaved as specified. Four messages were sent; `delete --ts` removed the first, `delete --date 2026-10-02 --pattern '/smoke-[0-9]+/' --select` with pick `1` removed one, and the remaining two were removed with `delete --pattern 'slackctl smoke' --limit 2` rather than the plan's bare `--limit 2`, because #general is a live channel and an unrelated post arriving between steps would otherwise have been selected; the deletion path exercised is identical. A final `messages --date --pattern` confirmed none remained. Slack accepted `limit: 100` on `conversations.history` (ADR Decision 5 holds; no change to the constant) and no 429 occurred. One defect surfaced and was fixed in the branch: a pseudo-terminal reporting `isTTY` without `columns` made the MESSAGE width NaN; `messageWidth` now floors it. App-posted messages in the live channel carried `bot_id` but no `username`, so `USER` showed the bot ID, as Decision 11's fallback specifies.
+
 - `npm test` green after every step and before every commit.
 - `node --check` on every new file.
 - `node bin/slackctl.js --help` and `node bin/slackctl.js delete --help` render the documented options and conflicts.
