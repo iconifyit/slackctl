@@ -6,6 +6,39 @@
  */
 
 const kSLACK_API_BASE = 'https://slack.com/api/';
+const kFORM_TYPE      = 'application/x-www-form-urlencoded';
+// The only Slack arguments this tool sends that are not strings. Everything
+// else is decoded as the string it was sent as, so a numeric-looking text or
+// cursor is never silently turned into a number.
+const kNUMERIC_FIELDS = new Set(['limit']);
+const kBOOLEAN_FIELDS = new Set(['exclude_archived', 'inclusive']);
+
+/**
+ * Decode a form-encoded request body into the argument object the service
+ * sent, undoing the transport's stringification for the fields known to be
+ * numbers or booleans. Anything but a form-encoded body is rejected so an
+ * encoding regression fails loudly instead of feeding garbage to a route.
+ *
+ * @param {object} init - The `fetch` options.
+ * @returns {object}
+ */
+const decodeArguments = (init) => {
+    const contentType = init.headers?.['Content-Type'] ?? '';
+
+    if (!contentType.startsWith(kFORM_TYPE)) {
+        throw new Error(`fake Slack expects a form-encoded body; got Content-Type ${JSON.stringify(contentType)}`);
+    }
+
+    return Object.fromEntries(
+        [...new URLSearchParams(String(init.body)).entries()].map(([key, value]) => {
+            if (kBOOLEAN_FIELDS.has(key)) {
+                return [key, value === 'true'];
+            }
+
+            return [key, kNUMERIC_FIELDS.has(key) ? Number(value) : value];
+        }),
+    );
+};
 
 /**
  * Build a minimal `Response`-like object from a route entry.
@@ -59,7 +92,7 @@ const historyRoute = (messages, { maxPageSize = 1000 } = {}) => {
  * unexpected call fails the test loudly.
  *
  * @param {Object<string, object|object[]>} routes
- * @returns {{ fetch: Function, calls: Array<{ method: string, args: object, headers: object }> }}
+ * @returns {{ fetch: Function, calls: Array<{ method: string, args: object, headers: object, rawBody: string }> }}
  */
 const createFakeSlack = (routes) => {
     const calls  = [];
@@ -71,7 +104,7 @@ const createFakeSlack = (routes) => {
 
     const fetch = async (url, init) => {
         const method = url.slice(kSLACK_API_BASE.length);
-        calls.push({ args: JSON.parse(init.body), headers: init.headers, method });
+        calls.push({ args: decodeArguments(init), headers: init.headers, method, rawBody: String(init.body) });
 
         const route = routes[method];
 
@@ -80,7 +113,7 @@ const createFakeSlack = (routes) => {
         }
 
         if (typeof route === 'function') {
-            return toResponse(route(JSON.parse(init.body)));
+            return toResponse(route(decodeArguments(init)));
         }
 
         if (!Array.isArray(route)) {

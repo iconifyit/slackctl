@@ -1,11 +1,7 @@
-# [DEPRECATED]
-
-Superseded by [0.0.3](./ADR-001-slackctl-cli-architecture-implementation-plan-0.0.3.md).
-
 # Implementation Plan: ADR-001 slackctl CLI Architecture
 
 **Governing ADR**: [ADR-001 0.0.6](../ADR-001-slackctl-cli-architecture-0.0.6.md) (Accepted 2026-10-02)
-**Version**: 0.0.2 (supersedes [0.0.1](./ADR-001-slackctl-cli-architecture-implementation-plan-0.0.1.md))
+**Version**: 0.0.3 (supersedes [0.0.2](./ADR-001-slackctl-cli-architecture-implementation-plan-0.0.2.md))
 **Date**: 2026-10-02
 **Owner decisions since 0.0.1**: the transport client and the two domain services are classes with private fields and constructor injection, decided by the owner (Scott Lewis) on 2026-10-02 after weighing the closure-factory alternative; see section 7.2 item 7.
 **Governing principles**: SEP² (the preamble of `~/.claude/CLAUDE.md`). Section 7 maps this plan to those principles and argues every deviation.
@@ -97,7 +93,8 @@ All source is CommonJS with `'use strict'`. The transport client and the two dom
 | `SlackClient` | class | The client. `constructor({ token, fetch, sleep, log })` stores the four collaborators in `#token`, `#fetch`, `#sleep`, `#log` |
 | `SlackClient#call(method, args)` | async method | One POST with retry-on-429 |
 | `SlackClient#paginate(method, args, pluck)` | async generator method | Cursor-following page iterator |
-| `SlackClient##post(method, args)` | private method | Builds and sends one request |
+| `SlackClient##post(method, args)` | private method | Builds and sends one form-encoded request |
+| `encodeArguments(args)` | module function | `URLSearchParams` of the arguments, omitting `undefined` values and JSON-encoding objects and arrays (the form Slack expects for `blocks` and the like); form encoding because Slack reads some arguments (`conversations.list` `types`) only from a form body and accepts it on every method |
 | `defaultSleep(ms)` | module function | `setTimeout` promise; the default for `sleep` |
 | `retryAfterSeconds(response)`, `parseResponse(method, response)` | module functions | Pure helpers; no instance state |
 
@@ -330,7 +327,7 @@ client.call(method, args = {})           -> Promise<object>
 client.paginate(method, args, pluck)     -> AsyncGenerator<Array>
 ```
 
-- `call` POSTs JSON to `kSLACK_API_BASE + method` with `Authorization: Bearer <token>` and `Content-Type: application/json`.
+- `call` POSTs a form-encoded body (`application/x-www-form-urlencoded; charset=utf-8`) to `kSLACK_API_BASE + method` with `Authorization: Bearer <token>`. Form encoding is used for every method because Slack ignores `conversations.list`'s `types` argument when it arrives as JSON and silently returns public channels only; every Web API method accepts form encoding, so no per-method special case exists. `undefined` values are omitted; objects and arrays are sent as JSON strings; all other values are stringified.
 - HTTP 429: read `Retry-After` (seconds; `kDEFAULT_RETRY_AFTER_SECONDS` if absent or unparsable), `log('Rate limited by Slack; waiting <n>s...')`, `await sleep(n * 1000)`, retry. On the `kMAX_ATTEMPTS`th consecutive 429, throw `SlackApiError(method, 'ratelimited')`.
 - Any other non-2xx status throws `Error('<method>: HTTP <status>')`.
 - Body with `ok: false` throws `SlackApiError(method, body.error)`.
@@ -522,18 +519,20 @@ Runner: `node --test test/` via `npm test`. Assertions: `node:assert/strict`. No
 
 | Helper | Contract |
 | --- | --- |
-| `test/helpers/fake-slack.js` → `createFakeSlack(routes)`, `historyRoute(messages, { maxPageSize })` | `createFakeSlack` returns `{ fetch, calls }`. `routes` maps a method name to one response, an ordered array consumed per request (pagination, 429 sequences), or a function of the request args. A response is `{ status = 200, headers = {}, body }`. `calls` is `[{ method, args, headers }]`. Requests to an unrouted method throw, so an unexpected call fails the test. `historyRoute` is a `conversations.history` route that behaves like Slack: newest first, honoring `oldest`, `latest`, `inclusive`, `limit`, and cursor paging, with an optional page-size cap modeling the restricted tier, so bounds and limits are asserted against Slack-like behavior rather than canned pages. |
+| `test/helpers/fake-slack.js` → `createFakeSlack(routes)`, `historyRoute(messages, { maxPageSize })` | `createFakeSlack` returns `{ fetch, calls }`. `routes` maps a method name to one response, an ordered array consumed per request (pagination, 429 sequences), or a function of the request args. A response is `{ status = 200, headers = {}, body }`. `calls` is `[{ method, args, headers, rawBody }]`, where `args` is the form body decoded back to the object the service sent (`limit` to a number; `exclude_archived` and `inclusive` to booleans; every other field left as the string it was sent as) and `rawBody` is the encoded string. A body whose `Content-Type` is not form-encoded is rejected, so an encoding regression fails loudly instead of hanging a paginating test. `test/fake-slack.test.js` pins both properties. Requests to an unrouted method throw, so an unexpected call fails the test. `historyRoute` is a `conversations.history` route that behaves like Slack: newest first, honoring `oldest`, `latest`, `inclusive`, `limit`, and cursor paging, with an optional page-size cap modeling the restricted tier, so bounds and limits are asserted against Slack-like behavior rather than canned pages. |
 | `test/helpers/streams.js` → `scriptedInput(lines, { isTTY })`, `capture()` | A readable that yields the lines, with `isTTY` settable; a writable that collects text into `.text`. |
 | `test/helpers/context.js` → `fakeContext({ routes, token, stdinLines, isTTY })`, `runCommand(argv, options)` | `fakeContext` assembles a `CommandContext` over the two helpers with a real `SlackClient` (`new SlackClient({ token, fetch, sleep: async () => {}, log })`). `runCommand` builds the program over it and runs `parseAsync`, resolving with the harness or rejecting with the thrown error. |
 | `test/fixtures/*.json` | Realistic payloads: workspace `Vectopus`, user `Scott Lewis` / `U01234567`; channels `general`, `development`, `client-project` (private), `random`, `signups`; `development` history by Scott and one other user; `signups` history of eleven app-posted `New signup: ...` notices with `bot_id`, `username: 'VectorIcons Messenger'`, and `<mailto:...|...>` markup (mailboxes under `example.invalid`, never routable addresses), spread across 2026-09-30 and 2026-10-01 in `America/New_York`. |
 
-Every test file sets `process.env.TZ = 'America/New_York'` before its first `require`. Every test states its scenario in a leading comment.
+Every test file that renders or computes dates sets `process.env.TZ = 'America/New_York'` before its first `require`; files that construct no dates do not. Every test states its scenario in a leading comment.
 
 ### 9.2 Transport (`test/slack.test.js`)
 
 | Scenario | Assertion | Uncertainty removed |
 | --- | --- | --- |
 | `ok:false` body with `error: 'channel_not_found'` | throws `SlackApiError` with `method` and `code` | API errors surface as typed errors, not silent results |
+| `conversations.list` with `types`, a boolean, a number, and an `undefined` value | `rawBody` is `exclude_archived=true&limit=200&types=public_channel%2Cprivate_channel`; decoded `args` match what was sent (the form `Content-Type` itself is asserted by the request-shape row above) | Arguments reach Slack in the encoding it honors; `undefined` is omitted |
+| `chat.postMessage` with a `blocks` array | `rawBody` carries `blocks` as a URL-encoded JSON string | Structured arguments are not degraded to `[object Object]` |
 | 429 with `Retry-After: 2`, then 200 | `sleep` called once with 2000; `log` called once with the wait line; result returned | Reactive wait honors Slack's number |
 | 429 with no `Retry-After`, then 200 | `sleep` called with 1000 | Missing header does not hang or crash |
 | 429 with `Retry-After: 0`, then 200; 429 with `Retry-After: 2junk`, then 200 | `sleep` called with 0; `sleep` called with 1000 | Zero is honored; a malformed header falls back rather than being partially parsed |
@@ -668,6 +667,10 @@ Run after step 9 against the vectoricons workspace with the owner's user token. 
 - `node --check` on every new file.
 - `node bin/slackctl.js --help` and `node bin/slackctl.js delete --help` render the documented options and conflicts.
 - Section 9.8 after step 9; the outcome is recorded in 10.0.
+
+### 10.0.1 Live verification of 1.0.1 (2026-10-02, authorized by the owner)
+
+The defect was reproduced directly against Slack before the fix: `conversations.list` with `types=public_channel,private_channel` returned 9 channels, none private, as a JSON body, and 14 channels, 5 private, form-encoded; `conversations.history` honored `channel` and `limit` in both encodings, which is why the 1.0.0 smoke did not surface it. After the fix, `slackctl channels` listed the five private channels the token's user belongs to with `private` and `yes`, and `slackctl messages signups --limit 2` resolved the private channel by name and returned its messages. The claim in 5.1 that every Web API method accepts form encoding is Slack's documented contract for the Web API and was exercised live on `auth.test`, `conversations.list`, and `conversations.history`; `chat.delete` and `chat.postMessage` were not re-run live for 1.0.1, since they were not changed in behavior and a live run would post to and delete from a real channel.
 
 ### 10.1 Review sequence
 
