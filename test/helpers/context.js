@@ -45,7 +45,7 @@ const fakeContext = ({ isTTY = true, routes = {}, stdinLines = [], token = kTOKE
  */
 const runCommand = async (argv, options) => {
     const harness = fakeContext(options);
-    const program = createProgram(harness.context).exitOverride();
+    const program = createProgram(harness.context);
 
     await program.parseAsync(['node', 'slackctl', ...argv]);
 

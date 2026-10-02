@@ -6,7 +6,7 @@
  * errors to exit codes. Data goes to stdout; progress and errors to stderr.
  */
 
-const { Command } = require('commander');
+const { Command, CommanderError } = require('commander');
 
 const pkg = require('../package.json');
 const { SlackApiError, SlackClient } = require('../src/slack');
@@ -14,8 +14,10 @@ const { AmbiguousChannelError, ChannelNotFoundError } = require('../src/conversa
 const { MessageNotFoundError } = require('../src/messages');
 const auth = require('../src/commands/auth');
 const channels = require('../src/commands/channels');
+const messages = require('../src/commands/messages');
 
 const kEXIT_RUNTIME_ERROR = 1;
+const kEXIT_USAGE_ERROR   = 2;
 
 /** Slack error codes with an actionable explanation. */
 const kFRIENDLY_ERRORS = {
@@ -77,6 +79,13 @@ const createContext = ({ env = process.env, stdin = process.stdin, stdout = proc
 /**
  * Build the commander program with every command registered.
  *
+ * Commander never calls `process.exit` here: every usage error, help display,
+ * and version display is thrown as a CommanderError for `run` to map. Usage
+ * errors are normalized to exit 2 (commander's own default is 1) so that
+ * runtime failures (1) and usage mistakes (2) are distinguishable to scripts.
+ * The override is installed before the subcommands are created so they
+ * inherit it.
+ *
  * @param {ReturnType<typeof createContext>} context
  * @returns {Command}
  */
@@ -84,6 +93,13 @@ const createProgram = (context) => {
     const program = new Command();
 
     program
+        .exitOverride((error) => {
+            if (error.exitCode === 0) {
+                throw error;
+            }
+
+            throw new CommanderError(kEXIT_USAGE_ERROR, error.code, error.message);
+        })
         .name('slackctl')
         .description(pkg.description)
         .version(pkg.version)
@@ -92,7 +108,7 @@ const createProgram = (context) => {
             writeOut : (text) => context.stdout.write(text),
         });
 
-    for (const { register } of [auth, channels]) {
+    for (const { register } of [auth, channels, messages]) {
         register(program, context);
     }
 
@@ -118,7 +134,8 @@ const describeError = (error) => {
 };
 
 /**
- * Run the CLI. Usage errors exit 2 through commander; runtime errors exit 1.
+ * Run the CLI. Usage errors exit 2 (commander has already written its
+ * message); help and version exit 0; runtime errors exit 1 with a message.
  *
  * @param {string[]} argv - Usually `process.argv`.
  * @returns {Promise<void>}
@@ -130,6 +147,11 @@ const run = async (argv) => {
         await createProgram(context).parseAsync(argv);
     }
     catch (error) {
+        if (error instanceof CommanderError) {
+            process.exitCode = error.exitCode;
+            return;
+        }
+
         context.stderr.write(`${describeError(error)}\n`);
         process.exitCode = kEXIT_RUNTIME_ERROR;
     }

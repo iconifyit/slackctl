@@ -385,7 +385,7 @@ register(program, context)   // context: CommandContext
 - A command never reads `process.env`, `process.stdin`, `process.stdout`, or `process.stderr` directly; it uses `context`. This is what makes the end-to-end tests possible without spawning a process.
 - A command constructs the services it needs from `context.getClient()` at the start of its action (`new ConversationsService(client)`, `new MessagesService(client)`); services are not shared through the context because each command run is one process and construction is free.
 - A command never calls `process.exit`. It returns normally for exit 0, throws one of the error classes for exit 1, or calls `command.error(message, { exitCode: 2 })` for a usage error discovered after parsing (the reversed range).
-- Option parsing uses commander argument parsers from `options.js` that throw `commander.InvalidArgumentError`; mutual exclusions are declared with `Option.conflicts`. Commander turns both into usage errors (exit 2) with no custom plumbing.
+- Option parsing uses commander argument parsers from `options.js` that throw `commander.InvalidArgumentError`; mutual exclusions are declared with `Option.conflicts`. Commander turns both into usage errors; the program's `exitOverride` normalizes them to exit 2 (amended during step 6: commander's own default usage exit code is 1, not 2 as the ADR's parenthetical states; the override is installed before subcommands are created so they inherit it, and `run` maps CommanderError exit codes straight through).
 
 | Option | Parser | Conflicts with |
 | --- | --- | --- |
@@ -417,7 +417,7 @@ Per-command behavior:
 | `SlackApiError` with a code in `kFRIENDLY_ERRORS` | that message on stderr | 1 |
 | Any other `SlackApiError` | `slackctl: <method> failed: <code>` on stderr | 1 |
 | Any other error | `slackctl: <message>` on stderr | 1 |
-| Usage error (commander) | commander's message on stderr | 2 |
+| Usage error (commander; normalized by `exitOverride`) | commander's message on stderr | 2 |
 
 `createContext` builds `getClient` lazily: the token is read on first call, `MissingTokenError` (`SLACK_ADMIN_TOKEN is not set.`) is thrown if empty, and the `SlackClient` instance is memoized. `help` and usage errors therefore never need the token, while every real command fails before any network call.
 

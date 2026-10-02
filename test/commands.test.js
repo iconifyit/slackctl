@@ -35,7 +35,7 @@ test('auth: prints workspace, user, user ID, token type, and status', async () =
 test('auth: a rejected token reports the failure and exits non-zero', async () => {
     // Scenario: the token was rotated; Slack answers invalid_auth.
     const harness = fakeContext({ routes: { 'auth.test': { body: { error: 'invalid_auth', ok: false } } } });
-    const program = createProgram(harness.context).exitOverride();
+    const program = createProgram(harness.context);
 
     await assert.rejects(program.parseAsync(['node', 'slackctl', 'auth']), (error) => error instanceof SlackApiError && error.code === 'invalid_auth');
     assert.equal(harness.stdout.text, 'Token:   user\nStatus:  failed (invalid_auth)\n');
@@ -65,7 +65,7 @@ test('a real command with no token fails before any request', async () => {
     const stdout  = capture();
     const stderr  = capture();
     const context = createContext({ env: {}, stderr, stdin: scriptedInput([]), stdout });
-    const program = createProgram(context).exitOverride();
+    const program = createProgram(context);
 
     await assert.rejects(program.parseAsync(['node', 'slackctl', 'channels']), (error) => {
         assert.ok(error instanceof MissingTokenError);
@@ -79,7 +79,7 @@ test('help works without a token and lists the commands', async () => {
     // Scenario: a new operator runs `slackctl --help` before configuring anything.
     const stdout  = capture();
     const context = createContext({ env: {}, stderr: capture(), stdin: scriptedInput([]), stdout });
-    const program = createProgram(context).exitOverride();
+    const program = createProgram(context);
 
     await assert.rejects(program.parseAsync(['node', 'slackctl', '--help']), (error) => error.exitCode === 0);
     assert.match(stdout.text, /Usage: slackctl/);
