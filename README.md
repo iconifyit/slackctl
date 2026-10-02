@@ -19,7 +19,7 @@ Deletion successful. 2 messages deleted.
 
 ## Requirements
 
-- Node.js 20 or newer (the repository pins 20.11.0 in `.node-version`).
+- Node.js 20.6 or newer (needed for `--env-file`; the repository pins 20.11.0 in `.node-version`).
 - A Slack **user token** for the workspace, with the scopes listed below, in the `SLACK_ADMIN_TOKEN` environment variable.
 
 ## Install
